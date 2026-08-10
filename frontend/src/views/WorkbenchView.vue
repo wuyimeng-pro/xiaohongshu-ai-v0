@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import api from '../api'
+import api, { streamRequest } from '../api'
 import UploadDropzone from '../components/UploadDropzone.vue'
 import NoteCard from '../components/NoteCard.vue'
 
@@ -16,6 +16,9 @@ const productName = ref('')
 const targetAudience = ref('')
 const toneStyle = ref('')
 const loading = ref(false)
+const streamingEnabled = ref(true)
+const streaming = ref(false)
+const streamText = ref('')
 const refining = ref(false)
 const aiResult = ref<{ id?: number; title: string; body: string; tags: string[]; db_saved?: boolean; db_error?: string } | null>(null)
 const versions = ref<{ id: number; title: string; body: string; tags: string[] }[] | null>(null)
@@ -32,32 +35,71 @@ const generate = async () => {
   if (inputMode.value === 'file' && !selectedFile.value) return
   if (inputMode.value === 'url' && !imageUrl.value.trim()) return
   loading.value = true
+  streaming.value = streamingEnabled.value
+  streamText.value = ''
   aiResult.value = null
   versions.value = null
   currentVersion.value = 0
   errorMsg.value = ''
 
   try {
-    let response
-    if (inputMode.value === 'file') {
-      const formData = new FormData()
-      formData.append('file', selectedFile.value!)
-      formData.append('product_name', productName.value)
-      formData.append('target_audience', targetAudience.value)
-      formData.append('tone_style', toneStyle.value)
-      response = await api.post('/upload', formData)
+    if (streamingEnabled.value) {
+      const onDelta = (text: string) => {
+        streamText.value += text
+      }
+      let result
+      if (inputMode.value === 'file') {
+        const formData = new FormData()
+        formData.append('file', selectedFile.value!)
+        formData.append('product_name', productName.value)
+        formData.append('target_audience', targetAudience.value)
+        formData.append('tone_style', toneStyle.value)
+        result = await streamRequest('/api/stream-upload', { formData }, onDelta)
+      } else {
+        result = await streamRequest(
+          '/api/stream',
+          {
+            body: {
+              url: imageUrl.value.trim(),
+              product_name: productName.value,
+              target_audience: targetAudience.value,
+              tone_style: toneStyle.value,
+            },
+          },
+          onDelta
+        )
+      }
+      aiResult.value = {
+        id: result.id,
+        title: result.title,
+        body: result.body,
+        tags: result.tags ?? [],
+        db_saved: result.db_saved,
+      }
+      versions.value = null
+      currentVersion.value = 0
     } else {
-      response = await api.post('/api/upload-by-url', {
-        url: imageUrl.value.trim(),
-        product_name: productName.value,
-        target_audience: targetAudience.value,
-        tone_style: toneStyle.value,
-      })
-    }
-    if (response.data.status === 'success') {
-      aiResult.value = response.data
-    } else {
-      errorMsg.value = response.data.message || '生成失败'
+      let response
+      if (inputMode.value === 'file') {
+        const formData = new FormData()
+        formData.append('file', selectedFile.value!)
+        formData.append('product_name', productName.value)
+        formData.append('target_audience', targetAudience.value)
+        formData.append('tone_style', toneStyle.value)
+        response = await api.post('/upload', formData)
+      } else {
+        response = await api.post('/api/upload-by-url', {
+          url: imageUrl.value.trim(),
+          product_name: productName.value,
+          target_audience: targetAudience.value,
+          tone_style: toneStyle.value,
+        })
+      }
+      if (response.data.status === 'success') {
+        aiResult.value = response.data
+      } else {
+        errorMsg.value = response.data.message || '生成失败'
+      }
     }
   } catch (error: any) {
     if (error?.response?.status === 401) {
@@ -67,10 +109,11 @@ const generate = async () => {
     if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
       errorMsg.value = '请求超时，请稍后重试'
     } else {
-      errorMsg.value = error?.response?.data?.detail || '连接后端失败，请确认后端已启动'
+      errorMsg.value = error?.response?.data?.detail || error?.message || '连接后端失败，请确认后端已启动'
     }
   } finally {
     loading.value = false
+    streaming.value = false
   }
 }
 
@@ -163,20 +206,30 @@ const selectVersion = (index: number) => {
         <input v-model="toneStyle" class="input" placeholder="如：活泼、专业、温柔" />
       </div>
 
+      <label class="toggle-row">
+        <input v-model="streamingEnabled" type="checkbox" />
+        <span>✨ 流式逐字输出（推荐）</span>
+      </label>
+
       <button
         class="btn btn-primary btn-block"
-        :disabled="loading || (inputMode === 'file' ? !selectedFile : !imageUrl.trim())"
+        :disabled="loading || streaming || (inputMode === 'file' ? !selectedFile : !imageUrl.trim())"
         @click="generate"
       >
         <span v-if="loading" class="spinner" style="width: 18px; height: 18px; border-width: 2px;"></span>
-        {{ loading ? 'AI 正在生成…' : '🚀 生成小红书文案' }}
+        {{ streaming ? 'AI 正在逐字生成…' : loading ? 'AI 正在生成…' : '🚀 生成小红书文案' }}
       </button>
     </div>
 
     <div class="card">
       <h2 class="panel-title">③ 生成结果</h2>
 
-      <div v-if="loading" class="loading-box">
+      <div v-if="streaming" class="stream-box">
+        <div class="stream-head">✨ AI 正在逐字生成文案…</div>
+        <p>{{ streamText }}<span class="stream-cursor"></span></p>
+      </div>
+
+      <div v-else-if="loading" class="loading-box">
         <div class="spinner"></div>
         <p>AI 正在识别图片并撰写文案，请稍候…</p>
       </div>

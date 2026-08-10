@@ -221,6 +221,47 @@ a {
   color: var(--text-sub);
 }
 
+.stream-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 16px;
+  min-height: 180px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.stream-head {
+  font-size: 13px;
+  color: var(--text-sub);
+  margin-bottom: 10px;
+}
+
+.stream-box p {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.8;
+  color: #4b5563;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.stream-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: var(--primary);
+  vertical-align: -2px;
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
 .spinner {
   width: 34px;
   height: 34px;
@@ -588,6 +629,23 @@ a {
   font-size: 13px;
   color: var(--text-sub);
   margin-bottom: 6px;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--text-sub);
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
 }
 
 .input-mode-tabs {

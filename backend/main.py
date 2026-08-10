@@ -2,7 +2,9 @@ from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from typing import Optional
 import uvicorn
 import os
 import base64
@@ -140,6 +142,15 @@ class UrlUploadRequest(BaseModel):
     product_name: str = ""
     target_audience: str = ""
     tone_style: str = ""
+
+
+class StreamRequest(BaseModel):
+    url: str = ""
+    record_id: Optional[int] = None
+    product_name: str = ""
+    target_audience: str = ""
+    tone_style: str = ""
+    instruction: str = ""
 
 
 app = FastAPI()
@@ -756,6 +767,293 @@ def upload_by_url(
     if db_error:
         result["db_error"] = f"文案生成成功，但保存到数据库失败：{db_error}"
     return result
+
+
+def sse_event(event_type: str, **data) -> str:
+    payload = json.dumps({"type": event_type, **data}, ensure_ascii=False)
+    return f"data: {payload}\n\n"
+
+
+def build_stream_prompt(
+    product_name: str,
+    target_audience: str,
+    tone_style: str,
+    instruction: str = "",
+    existing_copy: str = "",
+) -> str:
+    if instruction and existing_copy:
+        prompt = (
+            "你是一位资深的小红书文案博主。下面是之前基于某张图片生成的文案：\n"
+            f"{existing_copy}\n\n"
+            f"请根据用户的修改意见重新生成一篇小红书文案。\n修改意见：{instruction}\n\n"
+        )
+    else:
+        prompt = "你是一个资深的小红书文案博主。请根据我提供的图片，生成一篇小红书种草文案。\n"
+    prompt += (
+        "要求：\n"
+        "1. 标题：20字以内，引人注目，符合小红书爆款风格。\n"
+        "2. 正文：用种草口吻，分段清晰，自然流畅。\n"
+        "3. 话题标签：3到5个相关的 #话题标签。\n"
+    )
+    optional_parts = []
+    if product_name.strip():
+        optional_parts.append(f"产品名称：{product_name.strip()}")
+    if target_audience.strip():
+        optional_parts.append(f"目标人群：{target_audience.strip()}")
+    if tone_style.strip():
+        optional_parts.append(f"语气风格：{tone_style.strip()}")
+    if optional_parts:
+        prompt += "\n补充信息（生成文案时必须围绕这些信息展开，并在文案中自然体现）：\n" + "\n".join(
+            f"- {part}" for part in optional_parts
+        )
+    prompt += (
+        "\n请严格按以下 JSON 格式返回（不要返回多余废话）：\n"
+        '{"title": "这里写标题", "body": "这里写正文", "tags": ["#标签1", "#标签2", "#标签3"]}'
+    )
+    return prompt
+
+
+def resolve_stream_image(data: StreamRequest, user: dict):
+    """解析图片来源（URL 或历史记录），返回图片上下文 dict"""
+    if data.record_id is not None:
+        conn = pymysql.connect(**DB_CONFIG)
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT user_id, image_name, image_path, product_name, target_audience,
+                          tone_style, title, body, tags
+                   FROM generation_records WHERE id = %s""",
+                (data.record_id,),
+            )
+            row = cursor.fetchone()
+        finally:
+            conn.close()
+        if not row:
+            raise HTTPException(status_code=404, detail="记录不存在")
+        if row[0] != int(user["sub"]):
+            raise HTTPException(status_code=403, detail="只能基于自己的记录生成")
+        image_name, image_rel = row[1], row[2]
+        product_name = data.product_name.strip() or (row[3] or "")
+        target_audience = data.target_audience.strip() or (row[4] or "")
+        tone_style = data.tone_style.strip() or (row[5] or "")
+        existing_copy = f"标题：{row[6]}\n正文：{row[7]}\n标签：{row[8]}"
+        image_file = Path(__file__).resolve().parent / image_rel
+        if not image_file.exists():
+            raise HTTPException(status_code=400, detail="原图文件不存在")
+        content = image_file.read_bytes()
+    elif data.url.strip():
+        image_url = data.url.strip()
+        parsed = urlparse(image_url)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise HTTPException(status_code=400, detail="请输入有效的图片 URL（http/https）")
+        try:
+            resp = requests.get(
+                image_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                timeout=30,
+            )
+        except requests.exceptions.Timeout:
+            raise HTTPException(status_code=504, detail="下载图片超时，请稍后重试")
+        except requests.exceptions.RequestException as e:
+            raise HTTPException(status_code=502, detail=f"下载图片失败: {e}")
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"下载图片失败，HTTP {resp.status_code}")
+        content = resp.content
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail=f"图片大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）")
+        image_name = image_url[:255]
+        image_rel = None
+        product_name = data.product_name
+        target_audience = data.target_audience
+        tone_style = data.tone_style
+        existing_copy = ""
+    else:
+        raise HTTPException(status_code=400, detail="需要提供在线图片 URL 或历史记录 ID")
+
+    detected = detect_image_type(content)
+    if detected is None:
+        raise HTTPException(status_code=400, detail="不支持的图片格式，仅支持 JPEG/PNG/GIF/WebP/BMP")
+    mime_type, ext = detected
+
+    # 保存图片（URL 来源需要落盘；记录来源复用原图路径）
+    if image_rel is None:
+        saved_name = f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+        saved_path = UPLOAD_DIR / saved_name
+        with open(saved_path, "wb") as f:
+            f.write(content)
+        image_rel = f"uploads/{saved_name}"
+
+    image_data_url = f"data:{mime_type};base64,{base64.b64encode(content).decode('utf-8')}"
+    return {
+        "image_data_url": image_data_url,
+        "image_name": image_name,
+        "image_rel": image_rel,
+        "product_name": product_name,
+        "target_audience": target_audience,
+        "tone_style": tone_style,
+        "existing_copy": existing_copy,
+        "instruction": data.instruction.strip(),
+        "parent_id": data.record_id,
+    }
+
+
+def qwen_stream_text(image_data_url: str, prompt: str):
+    """调用 DashScope OpenAI 兼容流式接口，逐段产出文本"""
+    url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {ALIYUN_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": "qwen-vl-plus",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": image_data_url}},
+                    {"type": "text", "text": prompt},
+                ],
+            }
+        ],
+        "stream": True,
+    }
+    try:
+        with requests.post(url, headers=headers, json=payload, stream=True, timeout=60) as resp:
+            if resp.status_code != 200:
+                yield f"ERROR:{resp.text[:200]}"
+                return
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                data_str = line[5:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data_str)
+                    delta = chunk["choices"][0]["delta"].get("content", "")
+                except Exception:
+                    continue
+                if delta:
+                    yield delta
+    except requests.exceptions.Timeout:
+        yield "ERROR:调用阿里云服务超时，请稍后重试"
+    except requests.exceptions.RequestException as e:
+        yield f"ERROR:调用阿里云服务失败: {e}"
+
+
+def generate_stream_events(ctx: dict, user: dict):
+    """SSE 事件生成器：逐字输出 → 解析保存 → done/error"""
+    prompt = build_stream_prompt(
+        ctx["product_name"],
+        ctx["target_audience"],
+        ctx["tone_style"],
+        ctx["instruction"],
+        ctx["existing_copy"],
+    )
+    accumulated = ""
+    for piece in qwen_stream_text(ctx["image_data_url"], prompt):
+        if piece.startswith("ERROR:"):
+            yield sse_event("error", message=piece[6:])
+            return
+        accumulated += piece
+        yield sse_event("delta", content=piece)
+
+    cleaned = accumulated.replace("```json", "").replace("```", "").strip()
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        yield sse_event("error", message="模型返回内容无法解析，请重试")
+        return
+    try:
+        result_data = json.loads(cleaned[start:end + 1])
+    except Exception:
+        yield sse_event("error", message="模型返回内容无法解析，请重试")
+        return
+
+    title = result_data.get("title", "生成标题失败")
+    body = result_data.get("body", "")
+    tags_list = result_data.get("tags", [])
+    tags = ",".join(tags_list)
+
+    record_id = None
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        sql = "INSERT INTO generation_records (user_id, parent_id, image_name, image_path, product_name, target_audience, tone_style, instruction, title, body, tags) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(sql, (
+            int(user["sub"]),
+            ctx["parent_id"],
+            ctx["image_name"],
+            ctx["image_rel"],
+            ctx["product_name"].strip() or None,
+            ctx["target_audience"].strip() or None,
+            ctx["tone_style"].strip() or None,
+            ctx["instruction"] or None,
+            title,
+            body,
+            tags,
+        ))
+        conn.commit()
+        record_id = cursor.lastrowid
+        conn.close()
+    except Exception as e:
+        print(f"❌ 数据库存入失败: {e}")
+
+    yield sse_event("done", id=record_id, title=title, body=body, tags=tags_list, db_saved=record_id is not None)
+
+
+@app.post("/api/stream")
+def stream_generate(
+    data: StreamRequest,
+    user: dict = Depends(get_current_user),
+):
+    ctx = resolve_stream_image(data, user)
+    return StreamingResponse(
+        generate_stream_events(ctx, user),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/stream-upload")
+async def stream_upload(
+    file: UploadFile = File(...),
+    product_name: str = Form(""),
+    target_audience: str = Form(""),
+    tone_style: str = Form(""),
+    user: dict = Depends(get_current_user),
+):
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="上传的图片为空")
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"图片大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）")
+    detected = detect_image_type(content)
+    if detected is None:
+        raise HTTPException(status_code=400, detail="不支持的图片格式，仅支持 JPEG/PNG/GIF/WebP/BMP")
+    mime_type, ext = detected
+    saved_name = f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+    saved_path = UPLOAD_DIR / saved_name
+    with open(saved_path, "wb") as f:
+        f.write(content)
+    image_rel = f"uploads/{saved_name}"
+    image_data_url = f"data:{mime_type};base64,{base64.b64encode(content).decode('utf-8')}"
+    ctx = {
+        "image_data_url": image_data_url,
+        "image_name": file.filename,
+        "image_rel": image_rel,
+        "product_name": product_name,
+        "target_audience": target_audience,
+        "tone_style": tone_style,
+        "existing_copy": "",
+        "instruction": "",
+        "parent_id": None,
+    }
+    return StreamingResponse(
+        generate_stream_events(ctx, user),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 if __name__ == "__main__":
