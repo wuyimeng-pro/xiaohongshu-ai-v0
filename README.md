@@ -4,7 +4,7 @@
 
 ## 功能特性
 
-- 图片上传（支持 JPEG / PNG / GIF / WebP / BMP，最大 20MB）
+- 图片输入：本地上传或在线图片 URL（支持 JPEG / PNG / GIF / WebP / BMP，最大 20MB）
 - 阿里云 Qwen-VL 多模态大模型识图与文案生成
 - 用户可选输入：产品名称、目标人群、语气风格（影响生成结果）
 - 小红书笔记卡片样式展示结果，支持一键复制
@@ -122,6 +122,7 @@ npm run dev        # 启动，访问 http://localhost:5173
 | GET | `/api/me` | 当前用户信息 |
 | GET | `/api/records` | 当前用户的历史记录 |
 | POST | `/upload` | 上传图片生成文案（需登录） |
+| POST | `/api/upload-by-url` | 通过在线图片 URL 生成文案（需登录） |
 | POST | `/api/refine` | 基于历史记录继续调优，生成 1~3 个新版本（需登录） |
 | GET | `/api/admin/stats` | 用量统计（管理员） |
 | GET | `/api/admin/users` | 用户列表（管理员） |

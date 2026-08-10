@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 import UploadDropzone from '../components/UploadDropzone.vue'
 import NoteCard from '../components/NoteCard.vue'
 
 const selectedFile = ref<File | null>(null)
-const previewUrl = ref('')
+const inputMode = ref<'file' | 'url'>('file')
+const imageUrl = ref('')
+const selectedFileUrl = ref('')
+const previewUrl = computed(() =>
+  inputMode.value === 'url' ? imageUrl.value.trim() : selectedFileUrl.value
+)
 const productName = ref('')
 const targetAudience = ref('')
 const toneStyle = ref('')
@@ -19,26 +24,36 @@ const errorMsg = ref('')
 const router = useRouter()
 
 watch(selectedFile, (file) => {
-  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
-  previewUrl.value = file ? URL.createObjectURL(file) : ''
+  if (selectedFileUrl.value) URL.revokeObjectURL(selectedFileUrl.value)
+  selectedFileUrl.value = file ? URL.createObjectURL(file) : ''
 })
 
 const generate = async () => {
-  if (!selectedFile.value) return
+  if (inputMode.value === 'file' && !selectedFile.value) return
+  if (inputMode.value === 'url' && !imageUrl.value.trim()) return
   loading.value = true
   aiResult.value = null
   versions.value = null
   currentVersion.value = 0
   errorMsg.value = ''
 
-  const formData = new FormData()
-  formData.append('file', selectedFile.value)
-  formData.append('product_name', productName.value)
-  formData.append('target_audience', targetAudience.value)
-  formData.append('tone_style', toneStyle.value)
-
   try {
-    const response = await api.post('/upload', formData)
+    let response
+    if (inputMode.value === 'file') {
+      const formData = new FormData()
+      formData.append('file', selectedFile.value!)
+      formData.append('product_name', productName.value)
+      formData.append('target_audience', targetAudience.value)
+      formData.append('tone_style', toneStyle.value)
+      response = await api.post('/upload', formData)
+    } else {
+      response = await api.post('/api/upload-by-url', {
+        url: imageUrl.value.trim(),
+        product_name: productName.value,
+        target_audience: targetAudience.value,
+        tone_style: toneStyle.value,
+      })
+    }
     if (response.data.status === 'success') {
       aiResult.value = response.data
     } else {
@@ -116,8 +131,23 @@ const selectVersion = (index: number) => {
 
   <div class="workbench-grid">
     <div class="card">
-      <h2 class="panel-title">① 上传图片</h2>
-      <UploadDropzone v-model="selectedFile" />
+      <h2 class="panel-title">① 图片来源</h2>
+      <div class="input-mode-tabs">
+        <button class="input-mode-tab" :class="{ active: inputMode === 'file' }" @click="inputMode = 'file'">
+          📁 本地上传
+        </button>
+        <button class="input-mode-tab" :class="{ active: inputMode === 'url' }" @click="inputMode = 'url'">
+          🔗 在线图片 URL
+        </button>
+      </div>
+
+      <UploadDropzone v-if="inputMode === 'file'" v-model="selectedFile" />
+      <div v-else class="field">
+        <input v-model="imageUrl" class="input" placeholder="粘贴图片链接，如 https://example.com/photo.jpg" />
+        <p style="font-size: 12px; color: #b0b3ba; margin: 8px 0 0;">
+          支持 http/https 图片链接，后端会自动下载并识别
+        </p>
+      </div>
 
       <h2 class="panel-title">② 补充信息（选填）</h2>
       <div class="field">
@@ -133,7 +163,11 @@ const selectVersion = (index: number) => {
         <input v-model="toneStyle" class="input" placeholder="如：活泼、专业、温柔" />
       </div>
 
-      <button class="btn btn-primary btn-block" :disabled="loading || !selectedFile" @click="generate">
+      <button
+        class="btn btn-primary btn-block"
+        :disabled="loading || (inputMode === 'file' ? !selectedFile : !imageUrl.trim())"
+        @click="generate"
+      >
         <span v-if="loading" class="spinner" style="width: 18px; height: 18px; border-width: 2px;"></span>
         {{ loading ? 'AI 正在生成…' : '🚀 生成小红书文案' }}
       </button>

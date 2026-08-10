@@ -15,6 +15,7 @@ import json
 import pymysql
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 import jwt
 from dotenv import load_dotenv
 
@@ -132,6 +133,13 @@ class RefineRequest(BaseModel):
     record_id: int
     instruction: str
     versions: int = 1
+
+
+class UrlUploadRequest(BaseModel):
+    url: str
+    product_name: str = ""
+    target_audience: str = ""
+    tone_style: str = ""
 
 
 app = FastAPI()
@@ -600,6 +608,155 @@ async def upload_image(
             return {"status": "error", "message": f"阿里云 API 调用失败: {response.text}"}
     except Exception as e:
         return {"status": "error", "message": f"服务端内部错误: {str(e)}"}
+
+
+@app.post("/api/upload-by-url")
+def upload_by_url(
+    data: UrlUploadRequest,
+    user: dict = Depends(get_current_user),
+):
+    image_url = data.url.strip()
+    parsed = urlparse(image_url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(status_code=400, detail="请输入有效的图片 URL（http/https）")
+
+    # 下载在线图片
+    try:
+        resp = requests.get(
+            image_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            },
+            timeout=30,
+        )
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="下载图片超时，请稍后重试")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"下载图片失败: {e}")
+
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"下载图片失败，HTTP {resp.status_code}")
+
+    content = resp.content
+    if not content:
+        raise HTTPException(status_code=400, detail="图片内容为空")
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"图片大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）")
+
+    detected = detect_image_type(content)
+    if detected is None:
+        raise HTTPException(status_code=400, detail="不支持的图片格式，仅支持 JPEG/PNG/GIF/WebP/BMP")
+    mime_type, ext = detected
+
+    # 保存图片
+    saved_name = f"{time.strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
+    saved_path = UPLOAD_DIR / saved_name
+    with open(saved_path, "wb") as f:
+        f.write(content)
+    saved_rel = f"uploads/{saved_name}"
+
+    base64_img = base64.b64encode(content).decode('utf-8')
+    image_data_url = f"data:{mime_type};base64,{base64_img}"
+
+    prompt = """你是一个资深的小红书文案博主。请根据我提供的图片，生成一篇小红书种草文案。
+要求：
+1. 标题：20字以内，引人注目，符合小红书爆款风格。
+2. 正文：用种草口吻，分段清晰，自然流畅。
+3. 话题标签：3到5个相关的 #话题标签。
+请严格按以下 JSON 格式返回（不要返回多余的废话）：
+{"title": "这里写标题", "body": "这里写正文", "tags": ["#标签1", "#标签2", "#标签3"]}"""
+
+    optional_parts = []
+    if data.product_name.strip():
+        optional_parts.append(f"产品名称：{data.product_name.strip()}")
+    if data.target_audience.strip():
+        optional_parts.append(f"目标人群：{data.target_audience.strip()}")
+    if data.tone_style.strip():
+        optional_parts.append(f"语气风格：{data.tone_style.strip()}")
+    if optional_parts:
+        prompt += "\n\n补充信息（生成文案时必须围绕这些信息展开，并在文案中自然体现）：\n" + "\n".join(
+            f"- {part}" for part in optional_parts
+        )
+
+    payload = {
+        "model": "qwen-vl-plus",
+        "input": {
+            "messages": [
+                {"role": "user", "content": [{"image": image_data_url}, {"text": prompt}]}
+            ]
+        },
+    }
+    url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+    headers = {
+        "Authorization": f"Bearer {ALIYUN_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="调用阿里云服务超时，请稍后重试")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"调用阿里云服务失败: {e}")
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"阿里云 API 调用失败: {response.text}")
+
+    result = response.json()
+    ai_text = result["output"]["choices"][0]["message"]["content"][0]["text"]
+    cleaned_text = ai_text.replace("```json", "").replace("```", "").strip()
+    start = cleaned_text.find("{")
+    end = cleaned_text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise HTTPException(status_code=502, detail="模型返回内容无法解析，请重试")
+    result_data = json.loads(cleaned_text[start:end + 1])
+
+    title = result_data.get("title", "生成标题失败")
+    body = result_data.get("body", "生成正文失败")
+    tags = ",".join(result_data.get("tags", []))
+
+    db_saved = False
+    db_error = None
+    record_id = None
+    conn = None
+    try:
+        conn = pymysql.connect(**DB_CONFIG)
+        cursor = conn.cursor()
+        sql = "INSERT INTO generation_records (user_id, image_name, image_path, product_name, target_audience, tone_style, title, body, tags) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(sql, (
+            int(user["sub"]),
+            image_url[:255],
+            saved_rel,
+            data.product_name.strip() or None,
+            data.target_audience.strip() or None,
+            data.tone_style.strip() or None,
+            title,
+            body,
+            tags,
+        ))
+        conn.commit()
+        record_id = cursor.lastrowid
+        db_saved = True
+        print(f"✅ 文案已成功存入数据库！标题：{title}")
+    except Exception as e:
+        db_error = str(e)
+        print(f"❌ 数据库存入失败: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+    result = {
+        "status": "success",
+        "id": record_id,
+        "title": title,
+        "body": body,
+        "tags": result_data.get("tags", []),
+        "db_saved": db_saved,
+        "image_path": saved_rel,
+        "image_url": image_url,
+    }
+    if db_error:
+        result["db_error"] = f"文案生成成功，但保存到数据库失败：{db_error}"
+    return result
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8000)

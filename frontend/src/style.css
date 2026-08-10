@@ -590,6 +590,36 @@ a {
   margin-bottom: 6px;
 }
 
+.input-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.input-mode-tab {
+  flex: 1;
+  padding: 9px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  color: var(--text-sub);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.18s;
+}
+
+.input-mode-tab:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.input-mode-tab.active {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
 .dropzone {
   border: 2px dashed #d8dae0;
   border-radius: var(--radius);
