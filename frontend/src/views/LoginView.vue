@@ -8,6 +8,7 @@ const mode = ref<'login' | 'register'>('login')
 const username = ref('')
 const password = ref('')
 const confirmPassword = ref('')
+const adminCode = ref('')
 const errorMsg = ref('')
 const loading = ref(false)
 
@@ -37,6 +38,7 @@ const submit = async () => {
     const response = await api.post(url, {
       username: username.value.trim(),
       password: password.value,
+      admin_code: adminCode.value,
     })
     if (response.data.status === 'success') {
       setSession(response.data.token, response.data.user)
@@ -78,6 +80,10 @@ const submit = async () => {
       <div v-if="mode === 'register'" class="field">
         <label>确认密码</label>
         <input v-model="confirmPassword" class="input" type="password" placeholder="再次输入密码" />
+      </div>
+      <div v-if="mode === 'register'" class="field">
+        <label>管理员邀请码（选填）</label>
+        <input v-model="adminCode" class="input" placeholder="留空则注册为普通用户" />
       </div>
 
       <button class="btn btn-primary btn-block" :disabled="loading" @click="submit">

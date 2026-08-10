@@ -35,6 +35,9 @@ JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_EXPIRE_HOURS = 24 * 7
 security = HTTPBearer(auto_error=False)
 
+# 管理员邀请码：注册时填写该码可创建管理员账号（留空则无法注册管理员）
+ADMIN_CODE = os.getenv("ADMIN_CODE", "")
+
 # 上传图片保存目录（自动创建）
 UPLOAD_DIR = Path(__file__).resolve().parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -117,6 +120,7 @@ def get_db():
 class RegisterRequest(BaseModel):
     username: str
     password: str
+    admin_code: str = ""
 
 
 class LoginRequest(BaseModel):
@@ -156,17 +160,18 @@ def register(data: RegisterRequest, conn: pymysql.connections.Connection = Depen
     if cursor.fetchone():
         raise HTTPException(status_code=400, detail="该账号已被注册")
 
+    role = "admin" if ADMIN_CODE and data.admin_code.strip() == ADMIN_CODE else "user"
     cursor.execute(
-        "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
-        (username, hash_password(password)),
+        "INSERT INTO users (username, password_hash, role) VALUES (%s, %s, %s)",
+        (username, hash_password(password), role),
     )
     conn.commit()
     user_id = cursor.lastrowid
-    token = create_token(user_id, username, "user")
+    token = create_token(user_id, username, role)
     return {
         "status": "success",
         "token": token,
-        "user": {"id": user_id, "username": username, "role": "user"},
+        "user": {"id": user_id, "username": username, "role": role},
     }
 
 
@@ -232,6 +237,100 @@ def list_records(
             "body": r[7],
             "tags": r[8].split(",") if r[8] else [],
             "created_at": r[9].strftime("%Y-%m-%d %H:%M:%S") if r[9] else None,
+        })
+    return {"status": "success", "records": records}
+
+
+def get_current_admin(user: dict = Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="仅管理员可访问")
+    return user
+
+
+@app.get("/api/admin/stats")
+def admin_stats(
+    user: dict = Depends(get_current_admin),
+    conn: pymysql.connections.Connection = Depends(get_db),
+):
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM users")
+    total_users = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM generation_records")
+    total_records = cursor.fetchone()[0]
+    cursor.execute(
+        "SELECT COUNT(*) FROM generation_records WHERE DATE(created_at) = CURDATE()"
+    )
+    today_records = cursor.fetchone()[0]
+    cursor.execute(
+        """SELECT DATE(created_at) AS d, COUNT(*) AS cnt
+           FROM generation_records
+           WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+           GROUP BY DATE(created_at)
+           ORDER BY d"""
+    )
+    daily = [
+        {"date": r[0].strftime("%m-%d") if r[0] else "未知", "count": r[1]}
+        for r in cursor.fetchall()
+    ]
+    return {
+        "status": "success",
+        "stats": {
+            "total_users": total_users,
+            "total_records": total_records,
+            "today_records": today_records,
+            "daily": daily,
+        },
+    }
+
+
+@app.get("/api/admin/users")
+def admin_users(
+    user: dict = Depends(get_current_admin),
+    conn: pymysql.connections.Connection = Depends(get_db),
+):
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT u.id, u.username, u.role, u.created_at, COUNT(r.id) AS generation_count
+           FROM users u
+           LEFT JOIN generation_records r ON r.user_id = u.id
+           GROUP BY u.id, u.username, u.role, u.created_at
+           ORDER BY u.id"""
+    )
+    users = []
+    for r in cursor.fetchall():
+        users.append({
+            "id": r[0],
+            "username": r[1],
+            "role": r[2],
+            "created_at": r[3].strftime("%Y-%m-%d %H:%M:%S") if r[3] else None,
+            "generation_count": r[4],
+        })
+    return {"status": "success", "users": users}
+
+
+@app.get("/api/admin/records")
+def admin_records(
+    user: dict = Depends(get_current_admin),
+    conn: pymysql.connections.Connection = Depends(get_db),
+):
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT r.id, u.username, r.image_name, r.image_path, r.title, r.tags, r.created_at
+           FROM generation_records r
+           LEFT JOIN users u ON r.user_id = u.id
+           ORDER BY r.id DESC
+           LIMIT 200"""
+    )
+    records = []
+    for r in cursor.fetchall():
+        records.append({
+            "id": r[0],
+            "username": r[1] or "未知用户",
+            "image_name": r[2],
+            "image_path": r[3],
+            "title": r[4],
+            "tags": r[5].split(",") if r[5] else [],
+            "created_at": r[6].strftime("%Y-%m-%d %H:%M:%S") if r[6] else None,
         })
     return {"status": "success", "records": records}
 
