@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps<{
   title: string
@@ -7,12 +7,34 @@ const props = defineProps<{
   tags: string[]
   imageUrl?: string
   refining?: boolean
+  authorName?: string
+  authorAvatar?: string
+  noteTime?: string
 }>()
 
 const emit = defineEmits<{ (e: 'refine', instruction: string): void }>()
 
 const copied = ref(false)
 const tuningText = ref('')
+const liked = ref(false)
+const collected = ref(false)
+const likes = ref(128)
+const collects = ref(66)
+const comments = ref(23)
+
+const authorName = computed(() => props.authorName || 'AI 文案助手')
+const authorAvatar = computed(() => props.authorAvatar || 'AI')
+const noteTime = computed(() => props.noteTime || '刚刚生成 · 小红书风格')
+
+const toggleLike = () => {
+  liked.value = !liked.value
+  likes.value += liked.value ? 1 : -1
+}
+
+const toggleCollect = () => {
+  collected.value = !collected.value
+  collects.value += collected.value ? 1 : -1
+}
 
 const copyResult = async () => {
   const text = `【${props.title}】\n\n${props.body}\n\n${props.tags.join(' ')}`
@@ -41,10 +63,13 @@ const submitRefine = () => {
 <template>
   <div class="note-card">
     <div class="note-card-head">
-      <div class="note-avatar">AI</div>
+      <div class="note-avatar">{{ authorAvatar }}</div>
       <div>
-        <div class="note-username">AI 文案助手</div>
-        <div class="note-time">刚刚生成 · 小红书风格</div>
+        <div class="note-username">
+          {{ authorName }}
+          <span class="note-badge">种草笔记</span>
+        </div>
+        <div class="note-time">{{ noteTime }}</div>
       </div>
     </div>
 
@@ -76,6 +101,18 @@ const submitRefine = () => {
           </button>
         </div>
       </div>
+    </div>
+
+    <div class="note-card-footer">
+      <button class="note-react" :class="{ active: liked }" @click="toggleLike">
+        <span class="note-react-icon">{{ liked ? '💗' : '🤍' }}</span>{{ likes }}
+      </button>
+      <button class="note-react" :class="{ active: collected }" @click="toggleCollect">
+        <span class="note-react-icon">{{ collected ? '⭐' : '☆' }}</span>{{ collects }}
+      </button>
+      <span class="note-react-static">
+        <span class="note-react-icon">💬</span>{{ comments }}
+      </span>
     </div>
   </div>
 </template>

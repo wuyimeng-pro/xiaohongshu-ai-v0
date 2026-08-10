@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
 
@@ -21,6 +21,64 @@ const loading = ref(true)
 const errorMsg = ref('')
 const records = ref<HistoryRecord[]>([])
 const router = useRouter()
+
+const keyword = ref('')
+const dateFilter = ref<'all' | 'today' | 'week'>('all')
+const dateOptions = [
+  { value: 'all', label: '全部时间' },
+  { value: 'today', label: '今天' },
+  { value: 'week', label: '近 7 天' },
+] as const
+
+const pageSize = 6
+const currentPage = ref(1)
+
+const matchesDate = (created: string | null) => {
+  if (!created || dateFilter.value === 'all') return true
+  const date = new Date(created.replace(' ', 'T'))
+  const now = new Date()
+  if (dateFilter.value === 'today') {
+    return date.toDateString() === now.toDateString()
+  }
+  const sixDaysAgo = new Date(now)
+  sixDaysAgo.setDate(now.getDate() - 6)
+  return date >= sixDaysAgo
+}
+
+const filteredRecords = computed(() => {
+  const kw = keyword.value.trim().toLowerCase()
+  return records.value.filter((record) => {
+    const haystack = [
+      record.title,
+      record.body,
+      record.tags.join(' '),
+      record.product_name,
+      record.target_audience,
+      record.tone_style,
+      record.instruction,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+    return (!kw || haystack.includes(kw)) && matchesDate(record.created_at)
+  })
+})
+
+const totalPages = computed(() =>
+  Math.max(1, Math.ceil(filteredRecords.value.length / pageSize))
+)
+
+const pagedRecords = computed(() =>
+  filteredRecords.value.slice((currentPage.value - 1) * pageSize, currentPage.value * pageSize)
+)
+
+watch([keyword, dateFilter], () => {
+  currentPage.value = 1
+})
+
+watch(totalPages, () => {
+  if (currentPage.value > totalPages.value) currentPage.value = totalPages.value
+})
 
 const loadRecords = async () => {
   loading.value = true
@@ -63,27 +121,69 @@ onMounted(loadRecords)
       <RouterLink to="/workbench" class="btn btn-primary">去生成第一篇</RouterLink>
     </div>
 
-    <div v-else class="history-list">
-      <article v-for="record in records" :key="record.id" class="history-card">
-        <div class="history-thumb">
-          <img v-if="record.image_path" :src="record.image_path" alt="上传图片" />
-          <div v-else class="history-thumb-empty">🖼️</div>
+    <template v-else>
+      <div class="card history-toolbar">
+        <div class="search-box">
+          <span>🔍</span>
+          <input v-model="keyword" class="input" placeholder="搜索标题、正文、标签或参数…" />
         </div>
-        <div class="history-info">
-          <h3>{{ record.title }}</h3>
-          <div v-if="record.product_name || record.target_audience || record.tone_style || record.instruction" class="history-meta">
-            <span v-if="record.product_name">产品：{{ record.product_name }}</span>
-            <span v-if="record.target_audience">人群：{{ record.target_audience }}</span>
-            <span v-if="record.tone_style">风格：{{ record.tone_style }}</span>
-            <span v-if="record.instruction">调优：{{ record.instruction }}</span>
-          </div>
-          <p class="history-body">{{ record.body }}</p>
-          <div class="history-foot">
-            <span v-for="tag in record.tags" :key="tag" class="tag-chip">{{ tag }}</span>
-            <span class="history-time">🕘 {{ record.created_at }}</span>
-          </div>
+        <div class="filter-tabs">
+          <button
+            v-for="option in dateOptions"
+            :key="option.value"
+            class="filter-chip"
+            :class="{ active: dateFilter === option.value }"
+            @click="dateFilter = option.value"
+          >
+            {{ option.label }}
+          </button>
         </div>
-      </article>
-    </div>
+        <span class="history-count">共 {{ filteredRecords.length }} 条</span>
+      </div>
+
+      <div v-if="filteredRecords.length === 0" class="card empty-state">
+        <div class="empty-icon">🔍</div>
+        <h3>没有匹配的记录</h3>
+        <p>换个关键词或时间范围试试，也可以去工作台生成新的文案。</p>
+        <RouterLink to="/workbench" class="btn btn-primary">去生成新文案</RouterLink>
+      </div>
+
+      <div v-else class="history-list">
+        <article v-for="record in pagedRecords" :key="record.id" class="history-card">
+          <div class="history-thumb">
+            <img v-if="record.image_path" :src="record.image_path" alt="上传图片" loading="lazy" />
+            <div v-else class="history-thumb-empty">🖼️</div>
+          </div>
+          <div class="history-info">
+            <h3>{{ record.title }}</h3>
+            <div v-if="record.product_name || record.target_audience || record.tone_style || record.instruction" class="history-meta">
+              <span v-if="record.product_name">产品：{{ record.product_name }}</span>
+              <span v-if="record.target_audience">人群：{{ record.target_audience }}</span>
+              <span v-if="record.tone_style">风格：{{ record.tone_style }}</span>
+              <span v-if="record.instruction">调优：{{ record.instruction }}</span>
+            </div>
+            <p class="history-body">{{ record.body }}</p>
+            <div class="history-foot">
+              <span v-for="tag in record.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+              <span class="history-time">🕘 {{ record.created_at }}</span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <nav v-if="totalPages > 1" class="pagination" aria-label="历史记录分页">
+        <button class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
+        <button
+          v-for="page in totalPages"
+          :key="page"
+          class="page-btn"
+          :class="{ active: currentPage === page }"
+          @click="currentPage = page"
+        >
+          {{ page }}
+        </button>
+        <button class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
+      </nav>
+    </template>
   </div>
 </template>

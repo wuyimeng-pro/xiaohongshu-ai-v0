@@ -52,9 +52,9 @@ const clearFile = () => {
         </div>
       </template>
       <template v-else>
-        <div class="dropzone-icon">📸</div>
-        <p><strong>点击选择图片</strong> 或拖拽到此处</p>
-        <p style="font-size: 12px; color: #b0b3ba;">支持 JPEG / PNG / GIF / WebP / BMP，最大 20MB</p>
+        <div class="dropzone-icon"><span>📸</span></div>
+        <p class="dropzone-title"><strong>点击选择图片</strong> 或拖拽到此处</p>
+        <p class="dropzone-hint">支持 JPEG / PNG / GIF / WebP / BMP，最大 20MB</p>
       </template>
     </div>
 

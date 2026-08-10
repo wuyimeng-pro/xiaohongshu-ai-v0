@@ -60,7 +60,7 @@ const submit = async () => {
       <h2 style="margin: 0 0 4px; text-align: center;">
         {{ mode === 'login' ? '欢迎回来 👋' : '创建你的账号 ✨' }}
       </h2>
-      <p style="text-align: center; color: #6b7280; margin: 0 0 20px; font-size: 14px;">
+      <p style="text-align: center; color: var(--text-sub); margin: 0 0 20px; font-size: 14px;">
         登录后可同步你的生成历史
       </p>
 

@@ -15,6 +15,7 @@ const previewUrl = computed(() =>
 const productName = ref('')
 const targetAudience = ref('')
 const toneStyle = ref('')
+const tonePresets = ['活泼', '专业', '温柔', '文艺', '幽默', '简约']
 const loading = ref(false)
 const streamingEnabled = ref(true)
 const streaming = ref(false)
@@ -187,7 +188,7 @@ const selectVersion = (index: number) => {
       <UploadDropzone v-if="inputMode === 'file'" v-model="selectedFile" />
       <div v-else class="field">
         <input v-model="imageUrl" class="input" placeholder="粘贴图片链接，如 https://example.com/photo.jpg" />
-        <p style="font-size: 12px; color: #b0b3ba; margin: 8px 0 0;">
+        <p style="font-size: 12px; color: var(--text-faint); margin: 8px 0 0;">
           支持 http/https 图片链接，后端会自动下载并识别
         </p>
       </div>
@@ -204,6 +205,17 @@ const selectVersion = (index: number) => {
       <div class="field">
         <label>语气风格</label>
         <input v-model="toneStyle" class="input" placeholder="如：活泼、专业、温柔" />
+        <div class="chip-row">
+          <button
+            v-for="tone in tonePresets"
+            :key="tone"
+            class="quick-chip"
+            :class="{ active: toneStyle === tone }"
+            @click="toneStyle = toneStyle === tone ? '' : tone"
+          >
+            {{ tone }}
+          </button>
+        </div>
       </div>
 
       <label class="toggle-row">
@@ -229,9 +241,15 @@ const selectVersion = (index: number) => {
         <p>{{ streamText }}<span class="stream-cursor"></span></p>
       </div>
 
-      <div v-else-if="loading" class="loading-box">
-        <div class="spinner"></div>
-        <p>AI 正在识别图片并撰写文案，请稍候…</p>
+      <div v-else-if="loading" class="note-skeleton" aria-label="AI 正在生成文案">
+        <div class="skeleton" style="height: 260px; border-radius: 16px 16px 0 0;"></div>
+        <div style="padding: 18px;">
+          <div class="skeleton" style="height: 22px; width: 72%; margin-bottom: 16px;"></div>
+          <div class="skeleton" style="height: 14px; margin-bottom: 10px;"></div>
+          <div class="skeleton" style="height: 14px; margin-bottom: 10px;"></div>
+          <div class="skeleton" style="height: 14px; width: 86%; margin-bottom: 18px;"></div>
+          <div class="skeleton" style="height: 34px; width: 46%;"></div>
+        </div>
       </div>
 
       <div v-else-if="aiResult">

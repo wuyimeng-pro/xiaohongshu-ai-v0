@@ -87,22 +87,34 @@ onMounted(loadAll)
       <div v-if="tab === 'overview'" class="card">
         <div class="stat-grid">
           <div class="stat-card">
+            <div class="stat-icon">👥</div>
             <div class="stat-num">{{ stats?.total_users }}</div>
             <div class="stat-label">总用户数</div>
           </div>
           <div class="stat-card">
+            <div class="stat-icon">🗒️</div>
             <div class="stat-num">{{ stats?.total_records }}</div>
             <div class="stat-label">累计生成次数</div>
           </div>
           <div class="stat-card">
+            <div class="stat-icon">⚡</div>
             <div class="stat-num">{{ stats?.today_records }}</div>
             <div class="stat-label">今日生成次数</div>
           </div>
         </div>
 
-        <h3 style="margin: 24px 0 12px;">最近 7 天每日生成次数</h3>
+        <h3 style="margin: 26px 0 6px;">📈 最近 7 天每日生成次数</h3>
+        <p style="margin: 0 0 18px; font-size: 13px; color: var(--text-light);">
+          展示各账号每日生成文案的数量趋势
+        </p>
         <div class="daily-bars">
-          <div v-for="item in stats?.daily" :key="item.date" class="daily-bar">
+          <div
+            v-for="(item, index) in stats?.daily"
+            :key="item.date"
+            class="daily-bar"
+            :class="{ today: index === (stats?.daily.length ?? 0) - 1 }"
+            :title="`${item.date}：${item.count} 次`"
+          >
             <div class="daily-count">{{ item.count }}</div>
             <div class="daily-track">
               <div class="daily-fill" :style="{ height: barHeight(item.count) }"></div>
@@ -128,7 +140,12 @@ onMounted(loadAll)
             <tbody>
               <tr v-for="u in users" :key="u.id">
                 <td>{{ u.id }}</td>
-                <td>{{ u.username }}</td>
+                <td>
+                  <div class="user-cell">
+                    <span class="user-avatar">{{ u.username.charAt(0).toUpperCase() }}</span>
+                    <span>{{ u.username }}</span>
+                  </div>
+                </td>
                 <td>
                   <span class="role-badge" :class="{ admin: u.role === 'admin' }">
                     {{ u.role === 'admin' ? '管理员' : '普通用户' }}
