@@ -6,7 +6,10 @@ const props = defineProps<{
   body: string
   tags: string[]
   imageUrl?: string
+  refining?: boolean
 }>()
+
+const emit = defineEmits<{ (e: 'refine', instruction: string): void }>()
 
 const copied = ref(false)
 const tuningText = ref('')
@@ -25,6 +28,13 @@ const copyResult = async () => {
   }
   copied.value = true
   setTimeout(() => (copied.value = false), 2000)
+}
+
+const submitRefine = () => {
+  const text = tuningText.value.trim()
+  if (!text || props.refining) return
+  emit('refine', text)
+  tuningText.value = ''
 }
 </script>
 
@@ -58,9 +68,12 @@ const copyResult = async () => {
           <input
             v-model="tuningText"
             class="input"
-            placeholder="多轮调优即将上线，如：语气再活泼一点…"
-            disabled
+            placeholder="输入修改意见，如：语气再活泼一点…"
+            @keyup.enter="submitRefine"
           />
+          <button class="btn btn-ghost btn-sm" style="margin-top: 8px;" :disabled="!tuningText.trim() || refining" @click="submitRefine">
+            {{ refining ? '调优中…' : '✨ 生成调优版本' }}
+          </button>
         </div>
       </div>
     </div>

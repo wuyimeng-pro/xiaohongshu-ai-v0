@@ -11,7 +11,10 @@ const productName = ref('')
 const targetAudience = ref('')
 const toneStyle = ref('')
 const loading = ref(false)
-const aiResult = ref<{ title: string; body: string; tags: string[]; db_saved?: boolean; db_error?: string } | null>(null)
+const refining = ref(false)
+const aiResult = ref<{ id?: number; title: string; body: string; tags: string[]; db_saved?: boolean; db_error?: string } | null>(null)
+const versions = ref<{ id: number; title: string; body: string; tags: string[] }[] | null>(null)
+const currentVersion = ref(0)
 const errorMsg = ref('')
 const router = useRouter()
 
@@ -24,6 +27,8 @@ const generate = async () => {
   if (!selectedFile.value) return
   loading.value = true
   aiResult.value = null
+  versions.value = null
+  currentVersion.value = 0
   errorMsg.value = ''
 
   const formData = new FormData()
@@ -51,6 +56,48 @@ const generate = async () => {
     }
   } finally {
     loading.value = false
+  }
+}
+
+const refine = async (instruction: string) => {
+  if (!aiResult.value?.id) {
+    errorMsg.value = '当前结果没有记录 ID，无法调优（请重新生成一次）'
+    return
+  }
+  refining.value = true
+  errorMsg.value = ''
+  try {
+    const response = await api.post('/api/refine', {
+      record_id: aiResult.value.id,
+      instruction,
+      versions: 3,
+    })
+    const resultVersions = response.data.versions
+    if (response.data.status === 'success' && resultVersions?.length) {
+      versions.value = resultVersions
+      currentVersion.value = 0
+      const first = resultVersions[0]
+      aiResult.value = { ...aiResult.value, id: first.id, title: first.title, body: first.body, tags: first.tags }
+    } else {
+      errorMsg.value = response.data.message || '调优失败，请稍后重试'
+    }
+  } catch (error: any) {
+    if (error?.response?.status === 401) {
+      router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+      return
+    }
+    errorMsg.value = error?.response?.data?.detail || '调优失败，请稍后重试'
+  } finally {
+    refining.value = false
+  }
+}
+
+const selectVersion = (index: number) => {
+  if (!versions.value) return
+  currentVersion.value = index
+  const v = versions.value[index]
+  if (v && aiResult.value) {
+    aiResult.value = { ...aiResult.value, id: v.id, title: v.title, body: v.body, tags: v.tags }
   }
 }
 </script>
@@ -101,11 +148,24 @@ const generate = async () => {
       </div>
 
       <div v-else-if="aiResult">
+        <div v-if="versions && versions.length > 1" class="version-bar">
+          <button
+            v-for="(v, index) in versions"
+            :key="v.id"
+            class="version-chip"
+            :class="{ active: index === currentVersion }"
+            @click="selectVersion(index)"
+          >
+            版本 {{ index + 1 }}
+          </button>
+        </div>
         <NoteCard
           :title="aiResult.title"
           :body="aiResult.body"
           :tags="aiResult.tags"
           :image-url="previewUrl"
+          :refining="refining"
+          @refine="refine"
         />
         <div v-if="aiResult.db_saved === false" class="alert alert-warning" style="margin-top: 14px;">
           ⚠️ 文案已生成，但保存到数据库失败：{{ aiResult.db_error || '未知错误' }}

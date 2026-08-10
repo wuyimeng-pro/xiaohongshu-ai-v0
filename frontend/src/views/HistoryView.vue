@@ -10,6 +10,7 @@ interface HistoryRecord {
   product_name: string | null
   target_audience: string | null
   tone_style: string | null
+  instruction: string | null
   title: string
   body: string
   tags: string[]
@@ -70,10 +71,11 @@ onMounted(loadRecords)
         </div>
         <div class="history-info">
           <h3>{{ record.title }}</h3>
-          <div v-if="record.product_name || record.target_audience || record.tone_style" class="history-meta">
+          <div v-if="record.product_name || record.target_audience || record.tone_style || record.instruction" class="history-meta">
             <span v-if="record.product_name">产品：{{ record.product_name }}</span>
             <span v-if="record.target_audience">人群：{{ record.target_audience }}</span>
             <span v-if="record.tone_style">风格：{{ record.tone_style }}</span>
+            <span v-if="record.instruction">调优：{{ record.instruction }}</span>
           </div>
           <p class="history-body">{{ record.body }}</p>
           <div class="history-foot">

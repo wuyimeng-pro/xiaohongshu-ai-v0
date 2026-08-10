@@ -128,6 +128,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class RefineRequest(BaseModel):
+    record_id: int
+    instruction: str
+    versions: int = 1
+
+
 app = FastAPI()
 
 # 上传目录静态访问（历史记录页展示图片用）
@@ -217,7 +223,7 @@ def list_records(
     cursor = conn.cursor()
     cursor.execute(
         """SELECT id, image_name, image_path, product_name, target_audience, tone_style,
-                  title, body, tags, created_at
+                  instruction, title, body, tags, created_at
            FROM generation_records
            WHERE user_id = %s
            ORDER BY id DESC""",
@@ -233,12 +239,132 @@ def list_records(
             "product_name": r[3],
             "target_audience": r[4],
             "tone_style": r[5],
-            "title": r[6],
-            "body": r[7],
-            "tags": r[8].split(",") if r[8] else [],
-            "created_at": r[9].strftime("%Y-%m-%d %H:%M:%S") if r[9] else None,
+            "instruction": r[6],
+            "title": r[7],
+            "body": r[8],
+            "tags": r[9].split(",") if r[9] else [],
+            "created_at": r[10].strftime("%Y-%m-%d %H:%M:%S") if r[10] else None,
         })
     return {"status": "success", "records": records}
+
+
+@app.post("/api/refine")
+def refine_copy(
+    data: RefineRequest,
+    user: dict = Depends(get_current_user),
+    conn: pymysql.connections.Connection = Depends(get_db),
+):
+    instruction = data.instruction.strip()
+    if not instruction:
+        raise HTTPException(status_code=400, detail="请填写修改意见")
+    if not (1 <= data.versions <= 3):
+        raise HTTPException(status_code=400, detail="版本数需为 1~3")
+
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT id, user_id, image_name, image_path, product_name, target_audience,
+                  tone_style, title, body, tags
+           FROM generation_records WHERE id = %s""",
+        (data.record_id,),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    if row[1] != int(user["sub"]):
+        raise HTTPException(status_code=403, detail="只能调优自己的记录")
+
+    image_name, image_rel, product_name, target_audience, tone_style = row[2], row[3], row[4], row[5], row[6]
+    title, body, tags = row[7], row[8], row[9]
+
+    # 读取原图并转 Base64
+    image_file = Path(__file__).resolve().parent / image_rel
+    if not image_file.exists():
+        raise HTTPException(status_code=400, detail="原图文件不存在，无法调优")
+    content = image_file.read_bytes()
+    detected = detect_image_type(content)
+    mime_type = detected[0] if detected else "image/jpeg"
+    image_data_url = f"data:{mime_type};base64,{base64.b64encode(content).decode('utf-8')}"
+
+    prompt = (
+        "你是一位资深的小红书文案博主。下面是之前基于某张图片生成的文案：\n"
+        f"标题：{title}\n正文：{body}\n标签：{tags}\n\n"
+        f"请根据用户的修改意见重新生成小红书文案。\n修改意见：{instruction}\n\n"
+        "要求：\n"
+        "1. 标题20字以内；正文种草口吻、分段清晰；标签3到5个。\n"
+        "2. 必须保留并围绕原图片内容，同时严格满足修改意见。\n"
+        f"3. 需要生成 {data.versions} 个版本，每个版本在满足修改意见的前提下风格有所不同。\n"
+        "4. 请严格按以下 JSON 格式返回（不要返回多余废话）：\n"
+        '{"versions": [{"title": "标题", "body": "正文", "tags": ["#标签1", "#标签2"]}]}'
+    )
+
+    payload = {
+        "model": "qwen-vl-plus",
+        "input": {
+            "messages": [
+                {"role": "user", "content": [{"image": image_data_url}, {"text": prompt}]}
+            ]
+        },
+    }
+    url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+    headers = {
+        "Authorization": f"Bearer {ALIYUN_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=60)
+    except requests.exceptions.Timeout:
+        raise HTTPException(status_code=504, detail="调用阿里云服务超时，请稍后重试")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=502, detail=f"调用阿里云服务失败: {e}")
+    if response.status_code != 200:
+        raise HTTPException(status_code=502, detail=f"阿里云 API 调用失败: {response.text}")
+
+    result = response.json()
+    ai_text = result["output"]["choices"][0]["message"]["content"][0]["text"]
+    cleaned_text = ai_text.replace("```json", "").replace("```", "").strip()
+    start = cleaned_text.find("{")
+    end = cleaned_text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise HTTPException(status_code=502, detail="模型返回内容无法解析，请重试")
+    result_data = json.loads(cleaned_text[start:end + 1])
+
+    raw_versions = result_data.get("versions")
+    if not isinstance(raw_versions, list) or len(raw_versions) == 0:
+        raw_versions = [result_data]
+
+    versions = []
+    for i, v in enumerate(raw_versions[:data.versions]):
+        v_title = (v.get("title") or f"版本{i + 1}").strip()
+        v_body = (v.get("body") or "").strip()
+        v_tags = v.get("tags") or []
+        tags_str = ",".join(v_tags)
+        cursor.execute(
+            """INSERT INTO generation_records
+               (user_id, parent_id, image_name, image_path, product_name, target_audience,
+                tone_style, instruction, title, body, tags)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (
+                int(user["sub"]),
+                data.record_id,
+                image_name,
+                image_rel,
+                product_name,
+                target_audience,
+                tone_style,
+                instruction,
+                v_title,
+                v_body,
+                tags_str,
+            ),
+        )
+        versions.append({
+            "id": cursor.lastrowid,
+            "title": v_title,
+            "body": v_body,
+            "tags": v_tags,
+        })
+    conn.commit()
+    return {"status": "success", "versions": versions}
 
 
 def get_current_admin(user: dict = Depends(get_current_user)):
@@ -430,6 +556,7 @@ async def upload_image(
             # 🟢 把数据写入 MySQL 数据库（失败也会明确告诉前端）
             db_saved = False
             db_error = None
+            record_id = None
             conn = None
             try:
                 conn = pymysql.connect(**DB_CONFIG)
@@ -447,6 +574,7 @@ async def upload_image(
                     tags,
                 ))
                 conn.commit()
+                record_id = cursor.lastrowid
                 db_saved = True
                 print(f"✅ 文案已成功存入数据库！标题：{title}")
             except Exception as e:
@@ -458,6 +586,7 @@ async def upload_image(
 
             result = {
                 "status": "success",
+                "id": record_id,
                 "title": title,
                 "body": body,
                 "tags": result_data.get("tags", []),

@@ -541,6 +541,36 @@ a {
   padding: 9px 12px;
 }
 
+.version-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.version-chip {
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-sub);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.18s;
+}
+
+.version-chip:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.version-chip.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
 /* ===== 登录页 ===== */
 .auth-wrap {
   max-width: 420px;
