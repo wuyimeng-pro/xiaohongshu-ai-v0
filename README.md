@@ -37,6 +37,7 @@ xiaohongshu-ai-v0/
 │   │   ├── components/    # 导航栏 / 上传区 / 笔记卡片
 │   │   └── api.ts         # Axios 封装（自动携带 token）
 │   └── package.json
+├── start.bat              # Windows 一键启动脚本
 └── README.md
 ```
 
@@ -48,6 +49,10 @@ xiaohongshu-ai-v0/
 - 阿里云百炼 API Key（[获取地址](https://bailian.console.aliyun.com/)）
 
 ## 快速开始
+
+### 0. 一键启动（Windows，推荐）
+
+双击项目根目录的 `start.bat`，脚本会自动检查 MySQL 服务、启动后端和前端，并打开浏览器。
 
 ### 1. 初始化数据库
 
