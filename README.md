@@ -51,6 +51,26 @@ xiaohongshu-ai-v0/
 - MySQL 8.x（本机安装）
 - 阿里云百炼 API Key（[获取地址](https://bailian.console.aliyun.com/)）
 
+## Docker 部署（可选）
+
+前置条件：安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/) 并启动。
+
+1. 确保 `backend/.env` 中已配置 `ALIYUN_API_KEY`、`JWT_SECRET`、`ADMIN_CODE`
+2. 在项目根目录执行：
+
+```bash
+docker compose up -d --build
+```
+
+3. 访问 `http://localhost:8080`（官网首页），`http://localhost:8080/workbench` 为工作台
+
+说明：
+
+- 容器内 MySQL 数据保存在 Docker 卷中，首次启动自动执行 `backend/schema.sql` 建表
+- 容器内 MySQL 端口映射为 `3307`，避免与本机已安装的 MySQL（3306）冲突
+- 上传的图片保存在 `backend/uploads` 目录
+- 停止服务：`docker compose down`（加 `-v` 会同时删除数据库数据）
+
 ## 快速开始
 
 ### 0. 一键启动（Windows，推荐）

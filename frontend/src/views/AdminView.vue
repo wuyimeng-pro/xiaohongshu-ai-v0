@@ -163,7 +163,7 @@ onMounted(loadAll)
                   <img
                     v-if="r.image_path"
                     class="thumb-sm"
-                    :src="'http://127.0.0.1:8000/' + r.image_path"
+                    :src="r.image_path"
                     alt="图片"
                   />
                 </td>

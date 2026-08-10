@@ -66,7 +66,7 @@ onMounted(loadRecords)
     <div v-else class="history-list">
       <article v-for="record in records" :key="record.id" class="history-card">
         <div class="history-thumb">
-          <img v-if="record.image_path" :src="'http://127.0.0.1:8000/' + record.image_path" alt="上传图片" />
+          <img v-if="record.image_path" :src="record.image_path" alt="上传图片" />
           <div v-else class="history-thumb-empty">🖼️</div>
         </div>
         <div class="history-info">
