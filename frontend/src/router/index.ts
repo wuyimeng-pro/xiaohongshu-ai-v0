@@ -11,8 +11,9 @@ function getStoredUser() {
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    { path: '/', name: 'home', component: () => import('../views/HomeView.vue') },
     {
-      path: '/',
+      path: '/workbench',
       name: 'workbench',
       component: () => import('../views/WorkbenchView.vue'),
       meta: { requiresAuth: true },
@@ -45,7 +46,7 @@ router.beforeEach((to) => {
     return '/'
   }
   if (to.path === '/login' && token) {
-    return '/'
+    return '/workbench'
   }
   return true
 })

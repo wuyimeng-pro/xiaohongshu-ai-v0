@@ -9,7 +9,8 @@ const { isLoggedIn, user, clearSession } = useAuth()
 
 const links = computed(() => {
   const base = [
-    { to: '/', label: '工作台', icon: '✍️' },
+    { to: '/', label: '首页', icon: '🏠' },
+    { to: '/workbench', label: '工作台', icon: '✍️' },
     { to: '/history', label: '历史记录', icon: '🕘' },
   ]
   if (user.value?.role === 'admin') {

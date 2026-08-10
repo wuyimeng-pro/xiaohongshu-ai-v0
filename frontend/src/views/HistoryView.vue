@@ -60,7 +60,7 @@ onMounted(loadRecords)
       <div class="empty-icon">🗂️</div>
       <h3>还没有生成记录</h3>
       <p>去工作台生成第一篇文案吧，每次生成都会自动保存到你的账号下。</p>
-      <RouterLink to="/" class="btn btn-primary">去生成第一篇</RouterLink>
+      <RouterLink to="/workbench" class="btn btn-primary">去生成第一篇</RouterLink>
     </div>
 
     <div v-else class="history-list">

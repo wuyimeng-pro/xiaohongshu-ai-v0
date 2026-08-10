@@ -42,7 +42,7 @@ const submit = async () => {
     })
     if (response.data.status === 'success') {
       setSession(response.data.token, response.data.user)
-      router.push((route.query.redirect as string) || '/')
+      router.push((route.query.redirect as string) || '/workbench')
     } else {
       errorMsg.value = response.data.message || '操作失败'
     }
