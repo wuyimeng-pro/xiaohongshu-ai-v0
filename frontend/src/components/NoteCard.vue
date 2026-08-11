@@ -13,6 +13,7 @@ const props = defineProps<{
   compact?: boolean
   versionLabel?: string
   selected?: boolean
+  readonly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +23,8 @@ const emit = defineEmits<{
 
 const copied = ref(false)
 const tuningText = ref('')
+const exporting = ref(false)
+const cardEl = ref<HTMLElement | null>(null)
 const liked = ref(false)
 const collected = ref(false)
 const likes = ref(128)
@@ -55,7 +58,30 @@ const copyResult = async () => {
     textarea.remove()
   }
   copied.value = true
+  ElMessage.success('文案已复制，去小红书发布吧')
   setTimeout(() => (copied.value = false), 2000)
+}
+
+const exportImage = async () => {
+  if (!cardEl.value || exporting.value) return
+  exporting.value = true
+  try {
+    const { default: html2canvas } = await import('html2canvas')
+    const canvas = await html2canvas(cardEl.value, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+    })
+    const link = document.createElement('a')
+    link.download = `小红书文案_${new Date().toISOString().slice(0, 10)}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+    ElMessage.success('笔记图片已导出')
+  } catch {
+    ElMessage.error('导出失败：图片跨域可能无法绘制，请稍后重试')
+  } finally {
+    exporting.value = false
+  }
 }
 
 const submitRefine = () => {
@@ -68,6 +94,7 @@ const submitRefine = () => {
 
 <template>
   <div
+    ref="cardEl"
     class="note-card"
     :class="{ compact, 'version-selectable': compact && versionLabel, selected }"
     @click="compact && versionLabel ? emit('select') : undefined"
@@ -101,15 +128,20 @@ const submitRefine = () => {
       </div>
 
       <div class="note-card-actions" @click.stop>
-        <button class="btn btn-primary btn-sm" @click="copyResult">
-          {{ copied ? '✅ 已复制' : '📋 一键复制' }}
-        </button>
+        <div class="card-action-buttons">
+          <button class="btn btn-primary btn-sm" @click="copyResult">
+            {{ copied ? '✅ 已复制' : '📋 一键复制' }}
+          </button>
+          <button v-if="!compact" class="btn btn-ghost btn-sm" :disabled="exporting" @click="exportImage">
+            {{ exporting ? '⏳ 导出中…' : '🖼️ 导出图片' }}
+          </button>
+        </div>
         <div v-if="compact && versionLabel" class="compare-actions">
           <button class="btn btn-ghost btn-sm" :class="{ 'btn-choose': selected }" @click="emit('select')">
             {{ selected ? '✓ 当前版本' : '采用此版本' }}
           </button>
         </div>
-        <div v-else class="tuning-input">
+        <div v-else-if="!readonly" class="tuning-input">
           <input
             v-model="tuningText"
             class="input"

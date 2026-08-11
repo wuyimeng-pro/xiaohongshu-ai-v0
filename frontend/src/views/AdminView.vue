@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import api from '../api'
 import UsageChart from '../components/UsageChart.vue'
+import StatNumber from '../components/StatNumber.vue'
 
 interface AdminUser {
   id: number
@@ -78,17 +79,17 @@ onMounted(loadAll)
           <div class="stat-grid">
             <div class="stat-card">
               <div class="stat-icon">👥</div>
-              <div class="stat-num">{{ stats?.total_users }}</div>
+              <div class="stat-num"><StatNumber :value="stats?.total_users ?? 0" /></div>
               <div class="stat-label">总用户数</div>
             </div>
             <div class="stat-card">
               <div class="stat-icon">🗒️</div>
-              <div class="stat-num">{{ stats?.total_records }}</div>
+              <div class="stat-num"><StatNumber :value="stats?.total_records ?? 0" /></div>
               <div class="stat-label">累计生成次数</div>
             </div>
             <div class="stat-card">
               <div class="stat-icon">⚡</div>
-              <div class="stat-num">{{ stats?.today_records }}</div>
+              <div class="stat-num"><StatNumber :value="stats?.today_records ?? 0" /></div>
               <div class="stat-label">今日生成次数</div>
             </div>
           </div>

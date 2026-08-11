@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '../api'
+import NoteCard from '../components/NoteCard.vue'
 
 interface HistoryRecord {
   id: number
@@ -78,23 +79,6 @@ const pagedRecords = computed(() =>
 const openDetail = (record: HistoryRecord) => {
   detailRecord.value = record
   detailVisible.value = true
-}
-
-const copyDetail = async () => {
-  if (!detailRecord.value) return
-  const record = detailRecord.value
-  const text = `【${record.title}】\n\n${record.body}\n\n${record.tags.join(' ')}`
-  try {
-    await navigator.clipboard.writeText(text)
-  } catch {
-    const textarea = document.createElement('textarea')
-    textarea.value = text
-    document.body.appendChild(textarea)
-    textarea.select()
-    document.execCommand('copy')
-    textarea.remove()
-  }
-  ElMessage.success('完整文案已复制')
 }
 
 watch([keyword, dateFilter], () => {
@@ -213,27 +197,23 @@ onMounted(loadRecords)
 
     <el-dialog v-model="detailVisible" :title="detailRecord?.title || '记录详情'" width="min(720px, 92vw)">
       <div v-if="detailRecord" class="history-detail">
-        <div class="detail-grid">
-          <div class="detail-image">
-            <img v-if="detailRecord.image_path" :src="detailRecord.image_path" alt="上传图片" />
-            <div v-else class="detail-image-empty">🖼️</div>
-          </div>
-          <div class="detail-content">
-            <div class="detail-params">
-              <span v-if="detailRecord.product_name">产品：{{ detailRecord.product_name }}</span>
-              <span v-if="detailRecord.target_audience">人群：{{ detailRecord.target_audience }}</span>
-              <span v-if="detailRecord.tone_style">风格：{{ detailRecord.tone_style }}</span>
-              <span v-if="detailRecord.instruction">调优：{{ detailRecord.instruction }}</span>
-            </div>
-            <p class="detail-body">{{ detailRecord.body }}</p>
-            <div class="note-tags">
-              <span v-for="tag in detailRecord.tags" :key="tag" class="tag-chip">{{ tag }}</span>
-            </div>
-            <p class="detail-time">🕘 {{ detailRecord.created_at }}</p>
-          </div>
+        <NoteCard
+          :title="detailRecord.title"
+          :body="detailRecord.body"
+          :tags="detailRecord.tags"
+          :image-url="detailRecord.image_path || undefined"
+          author-name="AI 文案助手"
+          author-avatar="AI"
+          :note-time="`${detailRecord.created_at} · 历史记录`"
+          readonly
+        />
+        <div v-if="detailRecord.product_name || detailRecord.target_audience || detailRecord.tone_style || detailRecord.instruction" class="detail-params detail-params-block">
+          <span v-if="detailRecord.product_name">产品：{{ detailRecord.product_name }}</span>
+          <span v-if="detailRecord.target_audience">人群：{{ detailRecord.target_audience }}</span>
+          <span v-if="detailRecord.tone_style">风格：{{ detailRecord.tone_style }}</span>
+          <span v-if="detailRecord.instruction">调优：{{ detailRecord.instruction }}</span>
         </div>
         <div class="detail-actions">
-          <el-button type="primary" @click="copyDetail">📋 复制完整文案</el-button>
           <RouterLink to="/workbench" class="btn btn-ghost btn-sm">去工作台继续生成</RouterLink>
         </div>
       </div>

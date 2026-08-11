@@ -676,6 +676,15 @@ a {
 }
 
 /* ===== 工作台 ===== */
+.wb-steps {
+  margin-bottom: 24px;
+  padding: 20px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
 .workbench-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -1060,6 +1069,12 @@ a {
   flex-wrap: wrap;
   padding-top: 14px;
   border-top: 1px solid var(--border);
+}
+
+.card-action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .note-card-footer {
@@ -1758,6 +1773,10 @@ a {
   font-weight: 500;
 }
 
+.detail-params-block {
+  margin-top: 16px;
+}
+
 .detail-body {
   margin: 0;
   font-size: 14px;
@@ -2007,6 +2026,26 @@ a {
   transform: translateY(-6px);
 }
 
+/* ===== 滚动入场动效 ===== */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+.reveal-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
 /* ===== 骨架屏 ===== */
 .skeleton {
   position: relative;
@@ -2125,4 +2164,70 @@ html.dark .el-button--primary {
 
 .el-empty__description p {
   color: var(--text-sub);
+}
+
+/* ===== 404 页面 ===== */
+.not-found {
+  text-align: center;
+  padding: 80px 20px;
+}
+
+.nf-code {
+  font-size: 96px;
+  font-weight: 800;
+  line-height: 1.1;
+  background: var(--gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.not-found h1 {
+  margin: 10px 0 8px;
+  font-size: 26px;
+}
+
+.not-found p {
+  margin: 0 0 26px;
+  color: var(--text-sub);
+}
+
+.nf-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ===== 回到顶部 ===== */
+.back-to-top {
+  position: fixed;
+  right: 24px;
+  bottom: 28px;
+  z-index: 200;
+  width: 46px;
+  height: 46px;
+  border: none;
+  border-radius: 50%;
+  background: var(--gradient);
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  box-shadow: var(--shadow-brand);
+  transition: transform 0.2s ease;
+}
+
+.back-to-top:hover {
+  transform: translateY(-3px) scale(1.05);
+}
+
+.backtop-fade-enter-active,
+.backtop-fade-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.backtop-fade-enter-from,
+.backtop-fade-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }

@@ -13,6 +13,11 @@ const selectedFileUrl = ref('')
 const previewUrl = computed(() =>
   inputMode.value === 'url' ? imageUrl.value.trim() : selectedFileUrl.value
 )
+const activeStep = computed(() => {
+  const imageReady = inputMode.value === 'file' ? Boolean(selectedFile.value) : Boolean(imageUrl.value.trim())
+  if (!imageReady) return 0
+  return aiResult.value ? 2 : 1
+})
 const productName = ref('')
 const targetAudience = ref('')
 const toneStyle = ref('')
@@ -179,6 +184,18 @@ const selectVersion = (index: number) => {
       <span>🎯 自定义风格</span>
     </div>
   </section>
+
+  <el-steps class="wb-steps" :active="activeStep" align-center finish-status="success">
+    <el-step
+      title="图片来源"
+      :description="inputMode === 'file' ? (selectedFile ? '✓ 已选择图片' : '上传或拖拽图片') : (imageUrl.trim() ? '✓ 已填写链接' : '粘贴图片链接')"
+    />
+    <el-step title="补充信息" description="选填，让文案更精准" />
+    <el-step
+      title="生成文案"
+      :description="aiResult ? '✓ 已完成，可调优' : (loading || streaming ? 'AI 正在撰写…' : '点击生成')"
+    />
+  </el-steps>
 
   <div class="workbench-grid">
     <div class="card">

@@ -39,7 +39,7 @@ const demoNote = {
 
 <template>
   <div>
-    <section class="hero home-hero">
+    <section v-reveal class="hero home-hero">
       <h1>上传一张图片<br />生成爆款小红书文案</h1>
       <p>AI 文案工坊基于阿里云 Qwen-VL 多模态大模型，自动识别图片内容，一键生成标题、正文与话题标签，让你的种草笔记又快又专业。</p>
       <div class="home-cta">
@@ -54,11 +54,17 @@ const demoNote = {
       </div>
     </section>
 
-    <section id="features" class="home-section">
+    <section id="features" v-reveal class="home-section">
       <h2>产品功能</h2>
       <p class="sub">从一张图片到一篇完整的小红书文案，只需三步</p>
       <div class="features-grid">
-        <div v-for="f in features" :key="f.title" class="feature-card">
+        <div
+          v-for="(f, index) in features"
+          :key="f.title"
+          v-reveal
+          class="feature-card"
+          :style="{ transitionDelay: `${index * 60}ms` }"
+        >
           <div class="feature-icon">{{ f.icon }}</div>
           <h3>{{ f.title }}</h3>
           <p>{{ f.desc }}</p>
@@ -66,7 +72,7 @@ const demoNote = {
       </div>
     </section>
 
-    <section class="home-section">
+    <section v-reveal class="home-section">
       <h2>真实笔记效果</h2>
       <p class="sub">生成结果以小红书笔记卡片呈现，支持一键复制与多轮调优</p>
       <div class="home-demo">
@@ -86,7 +92,13 @@ const demoNote = {
       <h2>如何使用</h2>
       <p class="sub">简单的三步，快速产出你的第一篇种草笔记</p>
       <div class="steps-grid">
-        <div v-for="s in steps" :key="s.num" class="step-card">
+        <div
+          v-for="(s, index) in steps"
+          :key="s.num"
+          v-reveal
+          class="step-card"
+          :style="{ transitionDelay: `${index * 80}ms` }"
+        >
           <div class="step-num">{{ s.num }}</div>
           <h3>{{ s.title }}</h3>
           <p>{{ s.desc }}</p>
@@ -94,7 +106,7 @@ const demoNote = {
       </div>
     </section>
 
-    <section class="home-section">
+    <section v-reveal class="home-section">
       <h2>常见问题</h2>
       <p class="sub">使用前你可能想知道的事</p>
       <div class="card faq-card">
@@ -108,7 +120,7 @@ const demoNote = {
       </div>
     </section>
 
-    <section class="cta-box">
+    <section v-reveal class="cta-box">
       <h2>准备好了吗？现在就开始生成你的第一篇小红书文案</h2>
       <p>免费注册，登录后即可使用全部功能</p>
       <RouterLink to="/workbench" class="btn btn-primary btn-lg" style="background:#fff; color:var(--primary); box-shadow: none;">立即开始</RouterLink>
