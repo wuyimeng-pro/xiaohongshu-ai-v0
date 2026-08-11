@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { RouterLink } from 'vue-router'
+import NoteCard from '../components/NoteCard.vue'
+import noteCover from '../assets/note-cover.svg'
 
 const features = [
   { icon: '🖼️', title: '智能识图', desc: '基于阿里云 Qwen-VL 多模态大模型，自动识别图片内容与场景。' },
@@ -26,6 +28,13 @@ const faqs = [
 ]
 
 const openFaq = ref<number | null>(0)
+
+const demoNote = {
+  cover: noteCover,
+  title: '天翼云B27大楼打卡｜科技感爆棚的办公新地标',
+  body: '姐妹们！今天带大家打卡一个超酷的办公大楼——天翼云B27！\n\n一进门就被挑高大厅震撼到了，光线通透，科技感直接拉满。办公区视野超棒，随手一拍都是大片既视感～\n\n如果你也在找有设计感的办公空间，真的可以来这里看看！',
+  tags: ['#上海打卡', '#办公空间', '#科技感', '#天翼云B27', '#建筑美学'],
+}
 </script>
 
 <template>
@@ -54,6 +63,22 @@ const openFaq = ref<number | null>(0)
           <h3>{{ f.title }}</h3>
           <p>{{ f.desc }}</p>
         </div>
+      </div>
+    </section>
+
+    <section class="home-section">
+      <h2>真实笔记效果</h2>
+      <p class="sub">生成结果以小红书笔记卡片呈现，支持一键复制与多轮调优</p>
+      <div class="home-demo">
+        <NoteCard
+          :title="demoNote.title"
+          :body="demoNote.body"
+          :tags="demoNote.tags"
+          :image-url="demoNote.cover"
+          author-name="种草小助手"
+          author-avatar="AI"
+          note-time="2026-08-10 · 小红书风格"
+        />
       </div>
     </section>
 

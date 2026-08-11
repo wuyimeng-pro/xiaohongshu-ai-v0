@@ -8,6 +8,7 @@ import NoteCard from '../components/NoteCard.vue'
 const selectedFile = ref<File | null>(null)
 const inputMode = ref<'file' | 'url'>('file')
 const imageUrl = ref('')
+const urlPreviewError = ref(false)
 const selectedFileUrl = ref('')
 const previewUrl = computed(() =>
   inputMode.value === 'url' ? imageUrl.value.trim() : selectedFileUrl.value
@@ -199,6 +200,17 @@ const selectVersion = (index: number) => {
         <p style="font-size: 12px; color: var(--text-faint); margin: 8px 0 0;">
           支持 http/https 图片链接，后端会自动下载并识别
         </p>
+        <div v-if="imageUrl.trim()" class="url-preview">
+          <img
+            :src="imageUrl.trim()"
+            alt="图片预览"
+            @load="urlPreviewError = false"
+            @error="urlPreviewError = true"
+          />
+          <span v-if="urlPreviewError" class="url-preview-error">
+            ⚠️ 图片加载失败，请检查链接是否可访问
+          </span>
+        </div>
       </div>
 
       <h2 class="panel-title">② 补充信息（选填）</h2>
