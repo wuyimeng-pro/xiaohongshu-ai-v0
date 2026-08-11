@@ -109,5 +109,38 @@ Check 'Admin records list' ($arec.status -eq 'success' -and $arec.records.Count 
 Check 'Normal user admin api 403' ((HttpStatus "$base/api/admin/stats" 'GET' $h) -eq 403)
 Check 'Unauth admin api 401' ((HttpStatus "$base/api/admin/stats") -eq 401)
 
+Write-Output '===== G. Favorite / delete / params validation (zero-cost) ====='
+$firstRec = $recs.records | Select-Object -First 1
+if ($firstRec) {
+  $favOn = PostJson "$base/api/records/$($firstRec.id)/favorite" @{} $login.token
+  Check 'Favorite toggle on' ($favOn.status -eq 'success' -and $favOn.is_favorite -eq $true)
+  $favOff = PostJson "$base/api/records/$($firstRec.id)/favorite" @{} $login.token
+  Check 'Favorite toggle off' ($favOff.status -eq 'success' -and $favOff.is_favorite -eq $false)
+} else {
+  Check 'Favorite toggle on' $false
+  Check 'Favorite toggle off' $false
+}
+Check 'Favorite unauth 401' ((HttpStatus "$base/api/records/1/favorite" 'POST') -eq 401)
+Check 'Delete nonexistent 404' ((HttpStatus "$base/api/records/999999999" 'DELETE' $h) -eq 404)
+Check 'Delete unauth 401' ((HttpStatus "$base/api/records/1" 'DELETE') -eq 401)
+try {
+  PostJson "$base/api/upload-by-url" @{ url = 'https://example.com/x.jpg'; model = 'bad-model' } $login.token | Out-Null
+  Check 'Bad model rejected' $false
+} catch {
+  Check 'Bad model rejected (400)' ($_.Exception.Response.StatusCode.value__ -eq 400)
+}
+try {
+  PostJson "$base/api/refine" @{ record_id = [int]$up.id; instruction = 'x'; versions = 1; temperature = 2.0 } $login.token | Out-Null
+  Check 'Bad temperature rejected' $false
+} catch {
+  Check 'Bad temperature rejected (400)' ($_.Exception.Response.StatusCode.value__ -eq 400)
+}
+try {
+  PostJson "$base/api/stream" @{ url = 'https://example.com/x.jpg'; model = 'bad' } $login.token | Out-Null
+  Check 'Stream bad model rejected' $false
+} catch {
+  Check 'Stream bad model rejected (400)' ($_.Exception.Response.StatusCode.value__ -eq 400)
+}
+
 Write-Output "===== Summary: $script:fail failed ====="
 Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue

@@ -916,6 +916,17 @@ a {
   text-align: center;
 }
 
+.file-error {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--danger-border);
+  border-radius: 10px;
+  background: var(--danger-bg);
+  color: var(--danger);
+  font-size: 13px;
+  text-align: center;
+}
+
 .url-preview {
   margin-top: 12px;
   border: 1px solid var(--border);
@@ -945,6 +956,26 @@ a {
   overflow: hidden;
   background: var(--card);
   box-shadow: var(--shadow);
+}
+
+.title-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-soft);
+  color: var(--text-sub);
+  font-size: 13px;
+}
+
+.title-check.over {
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border-color: var(--warning-border);
 }
 
 /* ===== 小红书笔记卡片 ===== */

@@ -18,6 +18,8 @@ const activeStep = computed(() => {
   if (!imageReady) return 0
   return aiResult.value ? 2 : 1
 })
+const titleLength = computed(() => aiResult.value?.title.length ?? 0)
+const titleOver = computed(() => titleLength.value > 20)
 const productName = ref('')
 const targetAudience = ref('')
 const toneStyle = ref('')
@@ -51,6 +53,11 @@ watch(selectedFile, (file) => {
 const generate = async () => {
   if (inputMode.value === 'file' && !selectedFile.value) return
   if (inputMode.value === 'url' && !imageUrl.value.trim()) return
+  if (inputMode.value === 'url' && !/^https?:\/\/.+/i.test(imageUrl.value.trim())) {
+    errorMsg.value = '请输入有效的图片链接（需以 http:// 或 https:// 开头）'
+    ElMessage.error(errorMsg.value)
+    return
+  }
   loading.value = true
   streaming.value = streamingEnabled.value
   streamText.value = ''
@@ -358,6 +365,10 @@ const selectVersion = (index: number) => {
               </span>
             </button>
           </div>
+        </div>
+        <div class="title-check" :class="{ over: titleOver }">
+          <span>标题 {{ titleLength }}/20 字</span>
+          <span v-if="titleOver">⚠️ 超过 20 字，小红书可能截断显示，建议调优精简标题</span>
         </div>
         <NoteCard
           :title="aiResult.title"

@@ -671,10 +671,10 @@ async def upload_image(
                 conn.commit()
                 record_id = cursor.lastrowid
                 db_saved = True
-                print(f"✅ 文案已成功存入数据库！标题：{title}")
+                print(f"[OK] saved to db, title: {title}")
             except Exception as e:
                 db_error = str(e)
-                print(f"❌ 数据库存入失败: {e}")
+                print(f"[DB] save failed: {e}")
             finally:
                 if conn:
                     conn.close()
@@ -824,10 +824,10 @@ def upload_by_url(
         conn.commit()
         record_id = cursor.lastrowid
         db_saved = True
-        print(f"✅ 文案已成功存入数据库！标题：{title}")
+        print(f"[OK] saved to db, title: {title}")
     except Exception as e:
         db_error = str(e)
-        print(f"❌ 数据库存入失败: {e}")
+        print(f"[DB] save failed: {e}")
     finally:
         if conn:
             conn.close()
@@ -1083,7 +1083,7 @@ def generate_stream_events(ctx: dict, user: dict):
         record_id = cursor.lastrowid
         conn.close()
     except Exception as e:
-        print(f"❌ 数据库存入失败: {e}")
+        print(f"[DB] save failed: {e}")
 
     yield sse_event("done", id=record_id, title=title, body=body, tags=tags_list, db_saved=record_id is not None)
 
