@@ -10,16 +10,10 @@ const props = defineProps<{
   authorName?: string
   authorAvatar?: string
   noteTime?: string
-  compact?: boolean
-  versionLabel?: string
-  selected?: boolean
   readonly?: boolean
 }>()
 
-const emit = defineEmits<{
-  (e: 'refine', instruction: string): void
-  (e: 'select'): void
-}>()
+const emit = defineEmits<{ (e: 'refine', instruction: string): void }>()
 
 const copied = ref(false)
 const tuningText = ref('')
@@ -96,14 +90,7 @@ const submitRefine = () => {
   <div
     ref="cardEl"
     class="note-card"
-    :class="{ compact, 'version-selectable': compact && versionLabel, selected }"
-    @click="compact && versionLabel ? emit('select') : undefined"
   >
-    <div v-if="versionLabel" class="note-version-strip" :class="{ selected }">
-      <span>版本 {{ versionLabel }}</span>
-      <span v-if="selected" class="note-version-check">✓ 已采用</span>
-    </div>
-
     <div class="note-card-head">
       <div class="note-avatar">{{ authorAvatar }}</div>
       <div>
@@ -132,16 +119,11 @@ const submitRefine = () => {
           <button class="btn btn-primary btn-sm" @click="copyResult">
             {{ copied ? '✅ 已复制' : '📋 一键复制' }}
           </button>
-          <button v-if="!compact" class="btn btn-ghost btn-sm" :disabled="exporting" @click="exportImage">
+          <button class="btn btn-ghost btn-sm" :disabled="exporting" @click="exportImage">
             {{ exporting ? '⏳ 导出中…' : '🖼️ 导出图片' }}
           </button>
         </div>
-        <div v-if="compact && versionLabel" class="compare-actions">
-          <button class="btn btn-ghost btn-sm" :class="{ 'btn-choose': selected }" @click="emit('select')">
-            {{ selected ? '✓ 当前版本' : '采用此版本' }}
-          </button>
-        </div>
-        <div v-else-if="!readonly" class="tuning-input">
+        <div v-if="!readonly" class="tuning-input">
           <input
             v-model="tuningText"
             class="input"
@@ -155,7 +137,7 @@ const submitRefine = () => {
       </div>
     </div>
 
-    <div v-if="!compact" class="note-card-footer">
+    <div class="note-card-footer">
       <button class="note-react" :class="{ active: liked }" @click="toggleLike">
         <span class="note-react-icon">{{ liked ? '💗' : '🤍' }}</span>{{ likes }}
       </button>

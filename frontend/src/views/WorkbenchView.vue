@@ -294,21 +294,28 @@ const selectVersion = (index: number) => {
         <div v-if="versions && versions.length > 1" class="compare-area">
           <div class="compare-head">
             <h3>✨ 多版本对比</h3>
-            <p>三个版本并列展示，点击卡片或“采用此版本”切换最终结果。</p>
+            <p>点击卡片切换，当前采用 <strong>版本 {{ currentVersion + 1 }}</strong>。</p>
           </div>
           <div class="compare-grid">
-            <NoteCard
+            <button
               v-for="(v, index) in versions"
               :key="v.id"
-              :title="v.title"
-              :body="v.body"
-              :tags="v.tags"
-              :image-url="previewUrl"
-              compact
-              :version-label="String(index + 1)"
-              :selected="currentVersion === index"
-              @select="selectVersion(index)"
-            />
+              type="button"
+              class="version-card"
+              :class="{ selected: currentVersion === index }"
+              @click="selectVersion(index)"
+            >
+              <span class="vc-badge">版本 {{ index + 1 }}</span>
+              <span class="vc-check">✓</span>
+              <span class="vc-thumb">
+                <img :src="previewUrl" alt="" />
+              </span>
+              <span class="vc-info">
+                <span class="vc-title">{{ v.title }}</span>
+                <span class="vc-excerpt">{{ v.body }}</span>
+                <span class="vc-tags">{{ v.tags.slice(0, 3).join(' ') }}</span>
+              </span>
+            </button>
           </div>
         </div>
         <NoteCard
