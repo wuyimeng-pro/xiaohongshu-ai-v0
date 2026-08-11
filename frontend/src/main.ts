@@ -29,4 +29,11 @@ const reveal: Directive<HTMLElement> = {
   },
 }
 
-createApp(App).directive('reveal', reveal).use(router).mount('#app')
+const app = createApp(App)
+
+app.config.errorHandler = (error, _instance, info) => {
+  console.error('[app error]', info, error)
+  ElMessage.error('页面出了点小问题，请刷新重试')
+}
+
+app.directive('reveal', reveal).use(router).mount('#app')

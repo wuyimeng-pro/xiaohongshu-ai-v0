@@ -56,4 +56,23 @@ router.beforeEach((to) => {
   return true
 })
 
+// 路由/懒加载失败兜底：避免页面空白
+const retriedNavigations = new Set<string>()
+router.onError((error, to) => {
+  const key = to.fullPath || to.path || 'current'
+  const isChunkError = /Failed to fetch dynamically imported module|Outdated Optimize Dep/.test(String(error))
+
+  // 开发模式下 Vite 首次编译可能 504，自动重试一次
+  if (isChunkError && !retriedNavigations.has(key)) {
+    retriedNavigations.add(key)
+    setTimeout(() => {
+      router.replace(key).catch(() => {})
+    }, 600)
+    return
+  }
+
+  console.error('[router error]', error)
+  ElMessage.error('页面加载失败，请稍后重试或刷新页面')
+})
+
 export default router

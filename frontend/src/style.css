@@ -2011,19 +2011,25 @@ a {
 }
 
 /* ===== 页面切换动画 ===== */
-.page-fade-enter-active,
-.page-fade-leave-active {
-  transition: opacity 0.22s ease, transform 0.22s ease;
+.page-enter {
+  animation: pageIn 0.28s ease both;
 }
 
-.page-fade-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
+@keyframes pageIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-.page-fade-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
+@media (prefers-reduced-motion: reduce) {
+  .page-enter {
+    animation: none;
+  }
 }
 
 /* ===== 滚动入场动效 ===== */

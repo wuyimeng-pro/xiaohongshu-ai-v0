@@ -10,9 +10,7 @@ const route = useRoute()
   <NavBar />
   <main class="page">
     <RouterView v-slot="{ Component }">
-      <Transition name="page-fade" mode="out-in">
-        <component :is="Component" :key="route.path" />
-      </Transition>
+      <component :is="Component" :key="route.path" class="page-enter" />
     </RouterView>
   </main>
   <footer class="site-footer">
