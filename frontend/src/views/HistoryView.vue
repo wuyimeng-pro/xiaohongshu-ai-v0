@@ -16,6 +16,7 @@ interface HistoryRecord {
   body: string
   tags: string[]
   created_at: string | null
+  is_favorite: boolean
 }
 
 const loading = ref(true)
@@ -28,6 +29,7 @@ const detailRecord = ref<HistoryRecord | null>(null)
 
 const keyword = ref('')
 const dateFilter = ref<'all' | 'today' | 'week'>('all')
+const favoriteOnly = ref(false)
 const dateOptions = [
   { value: 'all', label: '全部时间' },
   { value: 'today', label: '今天' },
@@ -64,7 +66,11 @@ const filteredRecords = computed(() => {
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
-    return (!kw || haystack.includes(kw)) && matchesDate(record.created_at)
+    return (
+      (!kw || haystack.includes(kw)) &&
+      matchesDate(record.created_at) &&
+      (!favoriteOnly.value || record.is_favorite)
+    )
   })
 })
 
@@ -79,6 +85,42 @@ const pagedRecords = computed(() =>
 const openDetail = (record: HistoryRecord) => {
   detailRecord.value = record
   detailVisible.value = true
+}
+
+const toggleFavorite = async (record: HistoryRecord) => {
+  const previous = record.is_favorite
+  record.is_favorite = !previous
+  try {
+    const response = await api.post(`/api/records/${record.id}/favorite`)
+    record.is_favorite = response.data.is_favorite
+    ElMessage.success(record.is_favorite ? '已加入收藏' : '已取消收藏')
+  } catch (error: any) {
+    record.is_favorite = previous
+    ElMessage.error(error?.response?.data?.detail || '操作失败，请稍后重试')
+  }
+}
+
+const removeRecord = async (record: HistoryRecord) => {
+  try {
+    await ElMessageBox.confirm('删除后不可恢复，确定要删除这条记录吗？', '删除记录', {
+      type: 'warning',
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+    })
+  } catch {
+    return
+  }
+  try {
+    await api.delete(`/api/records/${record.id}`)
+    const index = records.value.findIndex((r) => r.id === record.id)
+    if (index >= 0) records.value.splice(index, 1)
+    if (detailVisible.value && detailRecord.value?.id === record.id) {
+      detailVisible.value = false
+    }
+    ElMessage.success('记录已删除')
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.detail || '删除失败，请稍后重试')
+  }
 }
 
 watch([keyword, dateFilter], () => {
@@ -142,6 +184,7 @@ onMounted(loadRecords)
             </el-radio-button>
           </el-radio-group>
         </div>
+        <el-checkbox v-model="favoriteOnly" class="fav-filter">⭐ 仅看收藏</el-checkbox>
         <span class="history-count">共 {{ filteredRecords.length }} 条</span>
       </div>
 
@@ -178,6 +221,23 @@ onMounted(loadRecords)
             <p class="history-body">{{ record.body }}</p>
             <div class="history-foot">
               <span v-for="tag in record.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+              <div class="history-ops" @click.stop>
+                <button
+                  class="icon-btn history-fav"
+                  :class="{ active: record.is_favorite }"
+                  :title="record.is_favorite ? '取消收藏' : '收藏'"
+                  @click="toggleFavorite(record)"
+                >
+                  {{ record.is_favorite ? '⭐' : '☆' }}
+                </button>
+                <button
+                  class="icon-btn history-del"
+                  title="删除"
+                  @click="removeRecord(record)"
+                >
+                  🗑️
+                </button>
+              </div>
               <span class="history-time">🕘 {{ record.created_at }}</span>
             </div>
           </div>
@@ -214,6 +274,13 @@ onMounted(loadRecords)
           <span v-if="detailRecord.instruction">调优：{{ detailRecord.instruction }}</span>
         </div>
         <div class="detail-actions">
+          <el-button
+            :type="detailRecord.is_favorite ? 'warning' : 'default'"
+            @click="toggleFavorite(detailRecord)"
+          >
+            {{ detailRecord.is_favorite ? '⭐ 已收藏' : '☆ 收藏' }}
+          </el-button>
+          <el-button type="danger" plain @click="removeRecord(detailRecord)">删除记录</el-button>
           <RouterLink to="/workbench" class="btn btn-ghost btn-sm">去工作台继续生成</RouterLink>
         </div>
       </div>

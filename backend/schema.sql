@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS generation_records (
   title VARCHAR(100) DEFAULT NULL,
   body TEXT,
   tags VARCHAR(255) DEFAULT NULL,
+  is_favorite TINYINT(1) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_user_id (user_id)

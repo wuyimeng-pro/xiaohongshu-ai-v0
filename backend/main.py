@@ -242,7 +242,7 @@ def list_records(
     cursor = conn.cursor()
     cursor.execute(
         """SELECT id, image_name, image_path, product_name, target_audience, tone_style,
-                  instruction, title, body, tags, created_at
+                  instruction, title, body, tags, created_at, is_favorite
            FROM generation_records
            WHERE user_id = %s
            ORDER BY id DESC""",
@@ -263,8 +263,65 @@ def list_records(
             "body": r[8],
             "tags": r[9].split(",") if r[9] else [],
             "created_at": r[10].strftime("%Y-%m-%d %H:%M:%S") if r[10] else None,
+            "is_favorite": bool(r[11]),
         })
     return {"status": "success", "records": records}
+
+
+@app.post("/api/records/{record_id}/favorite")
+def toggle_favorite(
+    record_id: int,
+    user: dict = Depends(get_current_user),
+    conn: pymysql.connections.Connection = Depends(get_db),
+):
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM generation_records WHERE id = %s AND user_id = %s",
+        (record_id, int(user["sub"])),
+    )
+    if not cursor.fetchone():
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    cursor.execute(
+        "UPDATE generation_records SET is_favorite = 1 - is_favorite WHERE id = %s",
+        (record_id,),
+    )
+    conn.commit()
+    cursor.execute("SELECT is_favorite FROM generation_records WHERE id = %s", (record_id,))
+    row = cursor.fetchone()
+    return {"status": "success", "is_favorite": bool(row[0]) if row else False}
+
+
+@app.delete("/api/records/{record_id}")
+def delete_record(
+    record_id: int,
+    user: dict = Depends(get_current_user),
+    conn: pymysql.connections.Connection = Depends(get_db),
+):
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT image_path FROM generation_records WHERE id = %s AND user_id = %s",
+        (record_id, int(user["sub"])),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    cursor.execute("DELETE FROM generation_records WHERE id = %s", (record_id,))
+    conn.commit()
+
+    # 顺带清理上传的图片文件（仅限 uploads 目录内，避免误删）
+    image_path = row[0] or ""
+    if image_path.startswith("/uploads/"):
+        file_path = (UPLOAD_DIR / image_path[len("/uploads/"):]).resolve()
+        upload_root = UPLOAD_DIR.resolve()
+        if upload_root in file_path.parents and file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError:
+                pass
+
+    return {"status": "success", "message": "记录已删除"}
 
 
 @app.post("/api/refine")
