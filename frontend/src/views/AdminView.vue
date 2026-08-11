@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import api from '../api'
+import UsageChart from '../components/UsageChart.vue'
 
 interface AdminUser {
   id: number
@@ -34,13 +35,6 @@ const stats = ref<Stats | null>(null)
 const users = ref<AdminUser[]>([])
 const records = ref<AdminRecord[]>([])
 
-const maxDaily = computed(() =>
-  Math.max(1, ...(stats.value?.daily.map((d) => d.count) ?? [1]))
-)
-
-const barHeight = (count: number) =>
-  `${Math.max(6, Math.round((count / maxDaily.value) * 100))}%`
-
 const loadAll = async () => {
   loading.value = true
   errorMsg.value = ''
@@ -55,6 +49,7 @@ const loadAll = async () => {
     records.value = recordsRes.data.records ?? []
   } catch (error: any) {
     errorMsg.value = error?.response?.data?.detail || '加载管理数据失败，请稍后重试'
+    ElMessage.error(errorMsg.value)
   } finally {
     loading.value = false
   }
@@ -78,122 +73,80 @@ onMounted(loadAll)
     <div v-else-if="errorMsg" class="alert alert-error">{{ errorMsg }}</div>
 
     <template v-else>
-      <div class="admin-tabs">
-        <button class="admin-tab" :class="{ active: tab === 'overview' }" @click="tab = 'overview'">📊 用量概览</button>
-        <button class="admin-tab" :class="{ active: tab === 'users' }" @click="tab = 'users'">👥 用户列表</button>
-        <button class="admin-tab" :class="{ active: tab === 'records' }" @click="tab = 'records'">📝 生成记录</button>
-      </div>
-
-      <div v-if="tab === 'overview'" class="card">
-        <div class="stat-grid">
-          <div class="stat-card">
-            <div class="stat-icon">👥</div>
-            <div class="stat-num">{{ stats?.total_users }}</div>
-            <div class="stat-label">总用户数</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">🗒️</div>
-            <div class="stat-num">{{ stats?.total_records }}</div>
-            <div class="stat-label">累计生成次数</div>
-          </div>
-          <div class="stat-card">
-            <div class="stat-icon">⚡</div>
-            <div class="stat-num">{{ stats?.today_records }}</div>
-            <div class="stat-label">今日生成次数</div>
-          </div>
-        </div>
-
-        <h3 style="margin: 26px 0 6px;">📈 最近 7 天每日生成次数</h3>
-        <p style="margin: 0 0 18px; font-size: 13px; color: var(--text-light);">
-          展示各账号每日生成文案的数量趋势
-        </p>
-        <div class="daily-bars">
-          <div
-            v-for="(item, index) in stats?.daily"
-            :key="item.date"
-            class="daily-bar"
-            :class="{ today: index === (stats?.daily.length ?? 0) - 1 }"
-            :title="`${item.date}：${item.count} 次`"
-          >
-            <div class="daily-count">{{ item.count }}</div>
-            <div class="daily-track">
-              <div class="daily-fill" :style="{ height: barHeight(item.count) }"></div>
+      <el-tabs v-model="tab" class="admin-tabs-ep">
+        <el-tab-pane label="📊 用量概览" name="overview">
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-icon">👥</div>
+              <div class="stat-num">{{ stats?.total_users }}</div>
+              <div class="stat-label">总用户数</div>
             </div>
-            <div class="daily-date">{{ item.date }}</div>
+            <div class="stat-card">
+              <div class="stat-icon">🗒️</div>
+              <div class="stat-num">{{ stats?.total_records }}</div>
+              <div class="stat-label">累计生成次数</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">⚡</div>
+              <div class="stat-num">{{ stats?.today_records }}</div>
+              <div class="stat-label">今日生成次数</div>
+            </div>
           </div>
-          <div v-if="!stats?.daily.length" class="daily-empty">近 7 天暂无生成记录</div>
-        </div>
-      </div>
 
-      <div v-else-if="tab === 'users'" class="card">
-        <div class="admin-table-wrap">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>账号</th>
-                <th>角色</th>
-                <th>注册时间</th>
-                <th>生成次数</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="u in users" :key="u.id">
-                <td>{{ u.id }}</td>
-                <td>
+          <div class="card chart-card">
+            <h3>📈 最近 7 天每日生成次数</h3>
+            <p class="chart-sub">展示各账号每日生成文案的数量趋势</p>
+            <UsageChart :daily="stats?.daily ?? []" />
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="👥 用户列表" name="users">
+          <div class="card">
+            <el-table :data="users" stripe>
+              <el-table-column prop="id" label="ID" width="70" />
+              <el-table-column label="账号" min-width="190">
+                <template #default="{ row }">
                   <div class="user-cell">
-                    <span class="user-avatar">{{ u.username.charAt(0).toUpperCase() }}</span>
-                    <span>{{ u.username }}</span>
+                    <span class="user-avatar">{{ row.username.charAt(0).toUpperCase() }}</span>
+                    <span>{{ row.username }}</span>
                   </div>
-                </td>
-                <td>
-                  <span class="role-badge" :class="{ admin: u.role === 'admin' }">
-                    {{ u.role === 'admin' ? '管理员' : '普通用户' }}
+                </template>
+              </el-table-column>
+              <el-table-column label="角色" width="120">
+                <template #default="{ row }">
+                  <span class="role-badge" :class="{ admin: row.role === 'admin' }">
+                    {{ row.role === 'admin' ? '管理员' : '普通用户' }}
                   </span>
-                </td>
-                <td>{{ u.created_at }}</td>
-                <td>{{ u.generation_count }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+                </template>
+              </el-table-column>
+              <el-table-column prop="created_at" label="注册时间" min-width="170" />
+              <el-table-column prop="generation_count" label="生成次数" width="110" />
+            </el-table>
+          </div>
+        </el-tab-pane>
 
-      <div v-else class="card">
-        <div class="admin-table-wrap">
-          <table class="admin-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>用户</th>
-                <th>图片</th>
-                <th>标题</th>
-                <th>标签</th>
-                <th>时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in records" :key="r.id">
-                <td>{{ r.id }}</td>
-                <td>{{ r.username }}</td>
-                <td>
-                  <img
-                    v-if="r.image_path"
-                    class="thumb-sm"
-                    :src="r.image_path"
-                    alt="图片"
-                  />
-                </td>
-                <td class="record-title">{{ r.title }}</td>
-                <td>
-                  <span v-for="tag in r.tags" :key="tag" class="tag-chip">{{ tag }}</span>
-                </td>
-                <td class="record-time">{{ r.created_at }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+        <el-tab-pane label="📝 生成记录" name="records">
+          <div class="card">
+            <el-table :data="records" stripe>
+              <el-table-column prop="id" label="ID" width="70" />
+              <el-table-column prop="username" label="用户" width="150" />
+              <el-table-column label="图片" width="90">
+                <template #default="{ row }">
+                  <img v-if="row.image_path" class="thumb-sm" :src="row.image_path" alt="图片" />
+                  <span v-else class="thumb-empty">🖼️</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip />
+              <el-table-column label="标签" min-width="210">
+                <template #default="{ row }">
+                  <span v-for="tag in row.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="created_at" label="时间" width="175" />
+            </el-table>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </template>
   </div>
 </template>

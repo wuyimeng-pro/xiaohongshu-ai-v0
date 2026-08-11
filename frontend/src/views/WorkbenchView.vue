@@ -98,8 +98,10 @@ const generate = async () => {
       }
       if (response.data.status === 'success') {
         aiResult.value = response.data
+        ElMessage.success('文案生成完成，已保存到历史记录')
       } else {
         errorMsg.value = response.data.message || '生成失败'
+        ElMessage.error(errorMsg.value)
       }
     }
   } catch (error: any) {
@@ -112,6 +114,7 @@ const generate = async () => {
     } else {
       errorMsg.value = error?.response?.data?.detail || error?.message || '连接后端失败，请确认后端已启动'
     }
+    ElMessage.error(errorMsg.value)
   } finally {
     loading.value = false
     streaming.value = false
@@ -137,8 +140,10 @@ const refine = async (instruction: string) => {
       currentVersion.value = 0
       const first = resultVersions[0]
       aiResult.value = { ...aiResult.value, id: first.id, title: first.title, body: first.body, tags: first.tags }
+      ElMessage.success('已生成 3 个调优版本，可对比选择')
     } else {
       errorMsg.value = response.data.message || '调优失败，请稍后重试'
+      ElMessage.error(errorMsg.value)
     }
   } catch (error: any) {
     if (error?.response?.status === 401) {
@@ -146,6 +151,7 @@ const refine = async (instruction: string) => {
       return
     }
     errorMsg.value = error?.response?.data?.detail || '调优失败，请稍后重试'
+    ElMessage.error(errorMsg.value)
   } finally {
     refining.value = false
   }
@@ -187,7 +193,9 @@ const selectVersion = (index: number) => {
 
       <UploadDropzone v-if="inputMode === 'file'" v-model="selectedFile" />
       <div v-else class="field">
-        <input v-model="imageUrl" class="input" placeholder="粘贴图片链接，如 https://example.com/photo.jpg" />
+        <el-input v-model="imageUrl" placeholder="粘贴图片链接，如 https://example.com/photo.jpg" clearable>
+          <template #prefix><span class="input-emoji">🔗</span></template>
+        </el-input>
         <p style="font-size: 12px; color: var(--text-faint); margin: 8px 0 0;">
           支持 http/https 图片链接，后端会自动下载并识别
         </p>
@@ -196,15 +204,15 @@ const selectVersion = (index: number) => {
       <h2 class="panel-title">② 补充信息（选填）</h2>
       <div class="field">
         <label>产品名称</label>
-        <input v-model="productName" class="input" placeholder="如：天翼云B27大楼" />
+        <el-input v-model="productName" placeholder="如：天翼云B27大楼" clearable />
       </div>
       <div class="field">
         <label>目标人群</label>
-        <input v-model="targetAudience" class="input" placeholder="如：科技从业者" />
+        <el-input v-model="targetAudience" placeholder="如：科技从业者" clearable />
       </div>
       <div class="field">
         <label>语气风格</label>
-        <input v-model="toneStyle" class="input" placeholder="如：活泼、专业、温柔" />
+        <el-input v-model="toneStyle" placeholder="如：活泼、专业、温柔" clearable />
         <div class="chip-row">
           <button
             v-for="tone in tonePresets"
@@ -218,19 +226,20 @@ const selectVersion = (index: number) => {
         </div>
       </div>
 
-      <label class="toggle-row">
-        <input v-model="streamingEnabled" type="checkbox" />
-        <span>✨ 流式逐字输出（推荐）</span>
-      </label>
+      <div class="toggle-row">
+        <el-checkbox v-model="streamingEnabled" size="large">✨ 流式逐字输出（推荐）</el-checkbox>
+      </div>
 
-      <button
-        class="btn btn-primary btn-block"
+      <el-button
+        class="generate-btn"
+        type="primary"
+        size="large"
         :disabled="loading || streaming || (inputMode === 'file' ? !selectedFile : !imageUrl.trim())"
+        :loading="loading"
         @click="generate"
       >
-        <span v-if="loading" class="spinner" style="width: 18px; height: 18px; border-width: 2px;"></span>
         {{ streaming ? 'AI 正在逐字生成…' : loading ? 'AI 正在生成…' : '🚀 生成小红书文案' }}
-      </button>
+      </el-button>
     </div>
 
     <div class="card">
@@ -253,16 +262,25 @@ const selectVersion = (index: number) => {
       </div>
 
       <div v-else-if="aiResult">
-        <div v-if="versions && versions.length > 1" class="version-bar">
-          <button
-            v-for="(v, index) in versions"
-            :key="v.id"
-            class="version-chip"
-            :class="{ active: index === currentVersion }"
-            @click="selectVersion(index)"
-          >
-            版本 {{ index + 1 }}
-          </button>
+        <div v-if="versions && versions.length > 1" class="compare-area">
+          <div class="compare-head">
+            <h3>✨ 多版本对比</h3>
+            <p>三个版本并列展示，点击卡片或“采用此版本”切换最终结果。</p>
+          </div>
+          <div class="compare-grid">
+            <NoteCard
+              v-for="(v, index) in versions"
+              :key="v.id"
+              :title="v.title"
+              :body="v.body"
+              :tags="v.tags"
+              :image-url="previewUrl"
+              compact
+              :version-label="String(index + 1)"
+              :selected="currentVersion === index"
+              @select="selectVersion(index)"
+            />
+          </div>
         </div>
         <NoteCard
           :title="aiResult.title"

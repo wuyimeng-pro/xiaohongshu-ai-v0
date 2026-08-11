@@ -22,6 +22,9 @@ const errorMsg = ref('')
 const records = ref<HistoryRecord[]>([])
 const router = useRouter()
 
+const detailVisible = ref(false)
+const detailRecord = ref<HistoryRecord | null>(null)
+
 const keyword = ref('')
 const dateFilter = ref<'all' | 'today' | 'week'>('all')
 const dateOptions = [
@@ -72,6 +75,28 @@ const pagedRecords = computed(() =>
   filteredRecords.value.slice((currentPage.value - 1) * pageSize, currentPage.value * pageSize)
 )
 
+const openDetail = (record: HistoryRecord) => {
+  detailRecord.value = record
+  detailVisible.value = true
+}
+
+const copyDetail = async () => {
+  if (!detailRecord.value) return
+  const record = detailRecord.value
+  const text = `【${record.title}】\n\n${record.body}\n\n${record.tags.join(' ')}`
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    textarea.remove()
+  }
+  ElMessage.success('完整文案已复制')
+}
+
 watch([keyword, dateFilter], () => {
   currentPage.value = 1
 })
@@ -114,48 +139,52 @@ onMounted(loadRecords)
 
     <div v-else-if="errorMsg" class="alert alert-error">{{ errorMsg }}</div>
 
-    <div v-else-if="records.length === 0" class="card empty-state">
-      <div class="empty-icon">🗂️</div>
-      <h3>还没有生成记录</h3>
-      <p>去工作台生成第一篇文案吧，每次生成都会自动保存到你的账号下。</p>
+    <el-empty v-else-if="records.length === 0" description="还没有生成记录">
+      <p class="empty-tip">去工作台生成第一篇文案吧，每次生成都会自动保存到你的账号下。</p>
       <RouterLink to="/workbench" class="btn btn-primary">去生成第一篇</RouterLink>
-    </div>
+    </el-empty>
 
     <template v-else>
       <div class="card history-toolbar">
         <div class="search-box">
-          <span>🔍</span>
-          <input v-model="keyword" class="input" placeholder="搜索标题、正文、标签或参数…" />
+          <el-input v-model="keyword" placeholder="搜索标题、正文、标签或参数…" clearable>
+            <template #prefix><span class="input-emoji">🔍</span></template>
+          </el-input>
         </div>
         <div class="filter-tabs">
-          <button
-            v-for="option in dateOptions"
-            :key="option.value"
-            class="filter-chip"
-            :class="{ active: dateFilter === option.value }"
-            @click="dateFilter = option.value"
-          >
-            {{ option.label }}
-          </button>
+          <el-radio-group v-model="dateFilter">
+            <el-radio-button v-for="option in dateOptions" :key="option.value" :label="option.value">
+              {{ option.label }}
+            </el-radio-button>
+          </el-radio-group>
         </div>
         <span class="history-count">共 {{ filteredRecords.length }} 条</span>
       </div>
 
-      <div v-if="filteredRecords.length === 0" class="card empty-state">
-        <div class="empty-icon">🔍</div>
-        <h3>没有匹配的记录</h3>
-        <p>换个关键词或时间范围试试，也可以去工作台生成新的文案。</p>
+      <el-empty v-if="filteredRecords.length === 0" description="没有匹配的记录">
+        <p class="empty-tip">换个关键词或时间范围试试，也可以去工作台生成新的文案。</p>
         <RouterLink to="/workbench" class="btn btn-primary">去生成新文案</RouterLink>
-      </div>
+      </el-empty>
 
       <div v-else class="history-list">
-        <article v-for="record in pagedRecords" :key="record.id" class="history-card">
+        <article
+          v-for="record in pagedRecords"
+          :key="record.id"
+          class="history-card"
+          role="button"
+          tabindex="0"
+          @click="openDetail(record)"
+          @keyup.enter="openDetail(record)"
+        >
           <div class="history-thumb">
             <img v-if="record.image_path" :src="record.image_path" alt="上传图片" loading="lazy" />
             <div v-else class="history-thumb-empty">🖼️</div>
           </div>
           <div class="history-info">
-            <h3>{{ record.title }}</h3>
+            <h3 class="history-title">
+              {{ record.title }}
+              <span class="history-open">查看详情 →</span>
+            </h3>
             <div v-if="record.product_name || record.target_audience || record.tone_style || record.instruction" class="history-meta">
               <span v-if="record.product_name">产品：{{ record.product_name }}</span>
               <span v-if="record.target_audience">人群：{{ record.target_audience }}</span>
@@ -171,19 +200,43 @@ onMounted(loadRecords)
         </article>
       </div>
 
-      <nav v-if="totalPages > 1" class="pagination" aria-label="历史记录分页">
-        <button class="page-btn" :disabled="currentPage === 1" @click="currentPage--">‹</button>
-        <button
-          v-for="page in totalPages"
-          :key="page"
-          class="page-btn"
-          :class="{ active: currentPage === page }"
-          @click="currentPage = page"
-        >
-          {{ page }}
-        </button>
-        <button class="page-btn" :disabled="currentPage === totalPages" @click="currentPage++">›</button>
-      </nav>
+      <el-pagination
+        v-if="totalPages > 1"
+        class="history-pagination"
+        background
+        layout="prev, pager, next"
+        :total="filteredRecords.length"
+        :page-size="pageSize"
+        v-model:current-page="currentPage"
+      />
     </template>
+
+    <el-dialog v-model="detailVisible" :title="detailRecord?.title || '记录详情'" width="min(720px, 92vw)">
+      <div v-if="detailRecord" class="history-detail">
+        <div class="detail-grid">
+          <div class="detail-image">
+            <img v-if="detailRecord.image_path" :src="detailRecord.image_path" alt="上传图片" />
+            <div v-else class="detail-image-empty">🖼️</div>
+          </div>
+          <div class="detail-content">
+            <div class="detail-params">
+              <span v-if="detailRecord.product_name">产品：{{ detailRecord.product_name }}</span>
+              <span v-if="detailRecord.target_audience">人群：{{ detailRecord.target_audience }}</span>
+              <span v-if="detailRecord.tone_style">风格：{{ detailRecord.tone_style }}</span>
+              <span v-if="detailRecord.instruction">调优：{{ detailRecord.instruction }}</span>
+            </div>
+            <p class="detail-body">{{ detailRecord.body }}</p>
+            <div class="note-tags">
+              <span v-for="tag in detailRecord.tags" :key="tag" class="tag-chip">{{ tag }}</span>
+            </div>
+            <p class="detail-time">🕘 {{ detailRecord.created_at }}</p>
+          </div>
+        </div>
+        <div class="detail-actions">
+          <el-button type="primary" @click="copyDetail">📋 复制完整文案</el-button>
+          <RouterLink to="/workbench" class="btn btn-ghost btn-sm">去工作台继续生成</RouterLink>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>

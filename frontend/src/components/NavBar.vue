@@ -28,6 +28,10 @@ const logout = () => {
   router.push('/login')
 }
 
+const handleCommand = (command: string) => {
+  if (command === 'logout') logout()
+}
+
 // 路由切换时收起移动端菜单
 watch(() => route.path, () => {
   menuOpen.value = false
@@ -61,6 +65,9 @@ watch(() => route.path, () => {
         >
           <span>{{ link.icon }}</span>{{ link.label }}
         </RouterLink>
+        <button v-if="isLoggedIn" class="nav-link nav-logout-mobile" @click="logout">
+          <span>🚪</span>退出登录
+        </button>
       </nav>
 
       <div class="nav-actions">
@@ -70,8 +77,19 @@ watch(() => route.path, () => {
         </button>
 
         <template v-if="isLoggedIn">
-          <span class="user-chip">👤 {{ user?.username }}</span>
-          <button class="btn btn-ghost btn-sm nav-logout" @click="logout">退出</button>
+          <el-dropdown trigger="click" @command="handleCommand">
+            <span class="user-chip nav-user">
+              👤 {{ user?.username }} <span class="caret">▾</span>
+            </span>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item disabled>
+                  {{ user?.username }} · {{ user?.role === 'admin' ? '管理员' : '普通用户' }}
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </template>
         <RouterLink v-else to="/login" class="btn btn-primary btn-sm nav-login">登录</RouterLink>
       </div>

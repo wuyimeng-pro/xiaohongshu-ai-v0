@@ -13,6 +13,7 @@ export const theme = ref<Theme>(getInitialTheme())
 function applyTheme(next: Theme) {
   const root = document.documentElement
   root.dataset.theme = next
+  root.classList.toggle('dark', next === 'dark')
   root.style.colorScheme = next
   localStorage.setItem('theme', next)
 }

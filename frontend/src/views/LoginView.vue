@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { useAuth } from '../auth'
 
 const mode = ref<'login' | 'register'>('login')
-const username = ref('')
-const password = ref('')
-const confirmPassword = ref('')
-const adminCode = ref('')
+const formRef = ref()
+const form = reactive({
+  username: '',
+  password: '',
+  confirmPassword: '',
+  adminCode: '',
+})
 const errorMsg = ref('')
 const loading = ref(false)
 
@@ -16,29 +19,38 @@ const router = useRouter()
 const route = useRoute()
 const { setSession } = useAuth()
 
+const validateConfirm = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (mode.value === 'register' && value !== form.password) {
+    callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
+}
+
+const rules = {
+  username: [
+    { required: true, message: '请输入账号', trigger: 'blur' },
+    { min: 3, max: 20, message: '账号长度 3~20 个字符', trigger: 'blur' },
+  ],
+  password: [
+    { required: true, message: '请输入密码', trigger: 'blur' },
+    { min: 6, message: '密码至少 6 位', trigger: 'blur' },
+  ],
+  confirmPassword: [{ validator: validateConfirm, trigger: 'blur' }],
+}
+
 const submit = async () => {
   errorMsg.value = ''
-
-  if (!username.value.trim()) {
-    errorMsg.value = '请输入账号'
-    return
-  }
-  if (!password.value) {
-    errorMsg.value = '请输入密码'
-    return
-  }
-  if (mode.value === 'register' && password.value !== confirmPassword.value) {
-    errorMsg.value = '两次输入的密码不一致'
-    return
-  }
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
 
   loading.value = true
   try {
     const url = mode.value === 'login' ? '/api/login' : '/api/register'
     const response = await api.post(url, {
-      username: username.value.trim(),
-      password: password.value,
-      admin_code: adminCode.value,
+      username: form.username.trim(),
+      password: form.password,
+      admin_code: form.adminCode,
     })
     if (response.data.status === 'success') {
       setSession(response.data.token, response.data.user)
@@ -65,33 +77,50 @@ const submit = async () => {
       </p>
 
       <div class="auth-tabs">
-        <button class="auth-tab" :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</button>
-        <button class="auth-tab" :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button>
+        <el-radio-group v-model="mode" class="auth-radio">
+          <el-radio-button label="login">登录</el-radio-button>
+          <el-radio-button label="register">注册</el-radio-button>
+        </el-radio-group>
       </div>
 
-      <div class="field">
-        <label>账号</label>
-        <input v-model="username" class="input" placeholder="3~20 个字符" />
-      </div>
-      <div class="field">
-        <label>密码</label>
-        <input v-model="password" class="input" type="password" :placeholder="mode === 'register' ? '至少 6 位' : '请输入密码'" />
-      </div>
-      <div v-if="mode === 'register'" class="field">
-        <label>确认密码</label>
-        <input v-model="confirmPassword" class="input" type="password" placeholder="再次输入密码" />
-      </div>
-      <div v-if="mode === 'register'" class="field">
-        <label>管理员邀请码（选填）</label>
-        <input v-model="adminCode" class="input" placeholder="留空则注册为普通用户" />
-      </div>
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" size="large">
+        <el-form-item label="账号" prop="username">
+          <el-input v-model="form.username" placeholder="3~20 个字符" clearable>
+            <template #prefix><span class="input-emoji">👤</span></template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="密码" prop="password">
+          <el-input
+            v-model="form.password"
+            type="password"
+            show-password
+            :placeholder="mode === 'register' ? '至少 6 位' : '请输入密码'"
+          >
+            <template #prefix><span class="input-emoji">🔒</span></template>
+          </el-input>
+        </el-form-item>
+        <el-form-item v-if="mode === 'register'" label="确认密码" prop="confirmPassword">
+          <el-input
+            v-model="form.confirmPassword"
+            type="password"
+            show-password
+            placeholder="再次输入密码"
+          >
+            <template #prefix><span class="input-emoji">🔒</span></template>
+          </el-input>
+        </el-form-item>
+        <el-form-item v-if="mode === 'register'" label="管理员邀请码（选填）">
+          <el-input v-model="form.adminCode" placeholder="留空则注册为普通用户" clearable>
+            <template #prefix><span class="input-emoji">🔑</span></template>
+          </el-input>
+        </el-form-item>
 
-      <button class="btn btn-primary btn-block" :disabled="loading" @click="submit">
-        <span v-if="loading" class="spinner" style="width: 18px; height: 18px; border-width: 2px;"></span>
-        {{ loading ? '处理中…' : mode === 'login' ? '登 录' : '注 册' }}
-      </button>
+        <el-button class="auth-submit" type="primary" :loading="loading" @click="submit">
+          {{ mode === 'login' ? '登 录' : '注 册' }}
+        </el-button>
+      </el-form>
 
-      <div v-if="errorMsg" class="alert alert-error" style="margin-top: 14px;">{{ errorMsg }}</div>
+      <el-alert v-if="errorMsg" :title="errorMsg" type="error" :closable="false" show-icon class="auth-error" />
     </div>
   </div>
 </template>
