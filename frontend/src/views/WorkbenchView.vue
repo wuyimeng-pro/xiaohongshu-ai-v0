@@ -22,6 +22,16 @@ const productName = ref('')
 const targetAudience = ref('')
 const toneStyle = ref('')
 const tonePresets = ['活泼', '专业', '温柔', '文艺', '幽默', '简约']
+const model = ref<'qwen-vl-plus' | 'qwen-vl-max'>('qwen-vl-plus')
+const temperature = ref(0.8)
+const styleTemplates = [
+  { label: '活泼种草', tone: '活泼、口语化、感叹词多' },
+  { label: '专业测评', tone: '专业、客观、数据化' },
+  { label: '文艺清新', tone: '文艺、细腻、有画面感' },
+  { label: '温柔治愈', tone: '温柔、治愈、亲切' },
+  { label: '幽默搞怪', tone: '幽默、俏皮、网络热梗' },
+  { label: '简洁干货', tone: '简洁、直接、干货清单' },
+]
 const loading = ref(false)
 const streamingEnabled = ref(true)
 const streaming = ref(false)
@@ -61,6 +71,8 @@ const generate = async () => {
         formData.append('product_name', productName.value)
         formData.append('target_audience', targetAudience.value)
         formData.append('tone_style', toneStyle.value)
+        formData.append('model', model.value)
+        formData.append('temperature', String(temperature.value))
         result = await streamRequest('/api/stream-upload', { formData }, onDelta)
       } else {
         result = await streamRequest(
@@ -71,6 +83,8 @@ const generate = async () => {
               product_name: productName.value,
               target_audience: targetAudience.value,
               tone_style: toneStyle.value,
+              model: model.value,
+              temperature: temperature.value,
             },
           },
           onDelta
@@ -93,6 +107,8 @@ const generate = async () => {
         formData.append('product_name', productName.value)
         formData.append('target_audience', targetAudience.value)
         formData.append('tone_style', toneStyle.value)
+        formData.append('model', model.value)
+        formData.append('temperature', String(temperature.value))
         response = await api.post('/upload', formData)
       } else {
         response = await api.post('/api/upload-by-url', {
@@ -100,6 +116,8 @@ const generate = async () => {
           product_name: productName.value,
           target_audience: targetAudience.value,
           tone_style: toneStyle.value,
+          model: model.value,
+          temperature: temperature.value,
         })
       }
       if (response.data.status === 'success') {
@@ -139,6 +157,8 @@ const refine = async (instruction: string) => {
       record_id: aiResult.value.id,
       instruction,
       versions: 3,
+      model: model.value,
+      temperature: temperature.value,
     })
     const resultVersions = response.data.versions
     if (response.data.status === 'success' && resultVersions?.length) {
@@ -231,6 +251,27 @@ const selectVersion = (index: number) => {
       </div>
 
       <h2 class="panel-title">② 补充信息（选填）</h2>
+      <div class="param-grid">
+        <div class="field">
+          <label>模型选择</label>
+          <el-select v-model="model" class="param-select">
+            <el-option label="qwen-vl-plus · 标准版（更快）" value="qwen-vl-plus" />
+            <el-option label="qwen-vl-max · 旗舰版（更强）" value="qwen-vl-max" />
+          </el-select>
+        </div>
+        <div class="field">
+          <label>创意度（温度）</label>
+          <el-slider v-model="temperature" :min="0" :max="1.5" :step="0.1" class="temp-slider" />
+          <p class="param-hint">低 = 稳定严谨，高 = 更有想象力</p>
+        </div>
+      </div>
+      <div class="field">
+        <label>风格模板（快捷填充）</label>
+        <el-select v-model="toneStyle" class="param-select" clearable placeholder="选择一个风格模板">
+          <el-option v-for="tpl in styleTemplates" :key="tpl.label" :label="tpl.label" :value="tpl.tone" />
+        </el-select>
+        <p class="param-hint">选择后自动填入“语气风格”，也可以继续手动修改</p>
+      </div>
       <div class="field">
         <label>产品名称</label>
         <el-input v-model="productName" placeholder="如：天翼云B27大楼" clearable />

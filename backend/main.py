@@ -120,6 +120,13 @@ def get_db():
         conn.close()
 
 
+def validate_model_temperature(model: str, temperature: float):
+    if model not in ("qwen-vl-plus", "qwen-vl-max"):
+        raise HTTPException(status_code=400, detail="不支持的模型，可选 qwen-vl-plus / qwen-vl-max")
+    if not (0 <= temperature <= 1.5):
+        raise HTTPException(status_code=400, detail="温度需在 0 ~ 1.5 之间")
+
+
 class RegisterRequest(BaseModel):
     username: str
     password: str
@@ -135,6 +142,8 @@ class RefineRequest(BaseModel):
     record_id: int
     instruction: str
     versions: int = 1
+    model: str = "qwen-vl-plus"
+    temperature: float = 0.8
 
 
 class UrlUploadRequest(BaseModel):
@@ -142,6 +151,8 @@ class UrlUploadRequest(BaseModel):
     product_name: str = ""
     target_audience: str = ""
     tone_style: str = ""
+    model: str = "qwen-vl-plus"
+    temperature: float = 0.8
 
 
 class StreamRequest(BaseModel):
@@ -151,6 +162,8 @@ class StreamRequest(BaseModel):
     target_audience: str = ""
     tone_style: str = ""
     instruction: str = ""
+    model: str = "qwen-vl-plus"
+    temperature: float = 0.8
 
 
 app = FastAPI()
@@ -335,6 +348,7 @@ def refine_copy(
         raise HTTPException(status_code=400, detail="请填写修改意见")
     if not (1 <= data.versions <= 3):
         raise HTTPException(status_code=400, detail="版本数需为 1~3")
+    validate_model_temperature(data.model, data.temperature)
 
     cursor = conn.cursor()
     cursor.execute(
@@ -374,12 +388,13 @@ def refine_copy(
     )
 
     payload = {
-        "model": "qwen-vl-plus",
+        "model": data.model,
         "input": {
             "messages": [
                 {"role": "user", "content": [{"image": image_data_url}, {"text": prompt}]}
             ]
         },
+        "parameters": {"temperature": data.temperature},
     }
     url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     headers = {
@@ -543,8 +558,11 @@ async def upload_image(
     product_name: str = Form(""),
     target_audience: str = Form(""),
     tone_style: str = Form(""),
+    model: str = Form("qwen-vl-plus"),
+    temperature: float = Form(0.8),
     user: dict = Depends(get_current_user),
 ):
+    validate_model_temperature(model, temperature)
     try:
         content = await file.read()
 
@@ -599,12 +617,13 @@ async def upload_image(
             )
 
         payload = {
-            "model": "qwen-vl-plus",
+            "model": model,
             "input": {
                 "messages": [
                     {"role": "user", "content": [{"image": image_data_url}, {"text": prompt}]}
                 ]
-            }
+            },
+            "parameters": {"temperature": temperature},
         }
 
         try:
@@ -683,6 +702,7 @@ def upload_by_url(
     data: UrlUploadRequest,
     user: dict = Depends(get_current_user),
 ):
+    validate_model_temperature(data.model, data.temperature)
     image_url = data.url.strip()
     parsed = urlparse(image_url)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
@@ -747,12 +767,13 @@ def upload_by_url(
         )
 
     payload = {
-        "model": "qwen-vl-plus",
+        "model": data.model,
         "input": {
             "messages": [
                 {"role": "user", "content": [{"image": image_data_url}, {"text": prompt}]}
             ]
         },
+        "parameters": {"temperature": data.temperature},
     }
     url = "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
     headers = {
@@ -951,10 +972,12 @@ def resolve_stream_image(data: StreamRequest, user: dict):
         "existing_copy": existing_copy,
         "instruction": data.instruction.strip(),
         "parent_id": data.record_id,
+        "model": data.model,
+        "temperature": data.temperature,
     }
 
 
-def qwen_stream_text(image_data_url: str, prompt: str):
+def qwen_stream_text(image_data_url: str, prompt: str, model: str = "qwen-vl-plus", temperature: float = 0.8):
     """调用 DashScope OpenAI 兼容流式接口，逐段产出文本"""
     url = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     headers = {
@@ -962,7 +985,7 @@ def qwen_stream_text(image_data_url: str, prompt: str):
         "Content-Type": "application/json",
     }
     payload = {
-        "model": "qwen-vl-plus",
+        "model": model,
         "messages": [
             {
                 "role": "user",
@@ -972,6 +995,7 @@ def qwen_stream_text(image_data_url: str, prompt: str):
                 ],
             }
         ],
+        "temperature": temperature,
         "stream": True,
     }
     try:
@@ -1008,7 +1032,12 @@ def generate_stream_events(ctx: dict, user: dict):
         ctx["existing_copy"],
     )
     accumulated = ""
-    for piece in qwen_stream_text(ctx["image_data_url"], prompt):
+    for piece in qwen_stream_text(
+        ctx["image_data_url"],
+        prompt,
+        ctx.get("model", "qwen-vl-plus"),
+        ctx.get("temperature", 0.8),
+    ):
         if piece.startswith("ERROR:"):
             yield sse_event("error", message=piece[6:])
             return
@@ -1064,6 +1093,7 @@ def stream_generate(
     data: StreamRequest,
     user: dict = Depends(get_current_user),
 ):
+    validate_model_temperature(data.model, data.temperature)
     ctx = resolve_stream_image(data, user)
     return StreamingResponse(
         generate_stream_events(ctx, user),
@@ -1078,8 +1108,11 @@ async def stream_upload(
     product_name: str = Form(""),
     target_audience: str = Form(""),
     tone_style: str = Form(""),
+    model: str = Form("qwen-vl-plus"),
+    temperature: float = Form(0.8),
     user: dict = Depends(get_current_user),
 ):
+    validate_model_temperature(model, temperature)
     content = await file.read()
     if not content:
         raise HTTPException(status_code=400, detail="上传的图片为空")
@@ -1105,6 +1138,8 @@ async def stream_upload(
         "existing_copy": "",
         "instruction": "",
         "parent_id": None,
+        "model": model,
+        "temperature": temperature,
     }
     return StreamingResponse(
         generate_stream_events(ctx, user),

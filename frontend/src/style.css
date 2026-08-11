@@ -724,6 +724,32 @@ a {
   margin-bottom: 6px;
 }
 
+.param-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 14px;
+}
+
+@media (max-width: 640px) {
+  .param-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.param-select {
+  width: 100%;
+}
+
+.temp-slider {
+  margin: 14px 8px 0;
+}
+
+.param-hint {
+  margin: 7px 0 0;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;
